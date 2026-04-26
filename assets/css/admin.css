@@ -1,0 +1,403 @@
+/* ==========================================================================
+   SEO Agent AI — Admin Stylesheet
+   ========================================================================== */
+
+/* -----------------------------------------------------------------------
+   Layout: page wrapper / card
+   ----------------------------------------------------------------------- */
+.seo-agent-wrap {
+    max-width: 1100px;
+}
+
+.seo-agent-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+}
+
+.seo-agent-card h2 {
+    margin-top: 0;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #50575e;
+    border-bottom: 1px solid #f0f0f1;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+}
+
+/* -----------------------------------------------------------------------
+   Connect page
+   ----------------------------------------------------------------------- */
+.seo-agent-connect-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.seo-agent-connect-status.connected {
+    background: #edf7ed;
+    border: 1px solid #1e8e3e;
+}
+
+.seo-agent-connect-status.disconnected {
+    background: #fcf0f1;
+    border: 1px solid #c0392b;
+}
+
+.seo-agent-connect-status .dashicons {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+}
+
+.seo-agent-connect-status.connected .dashicons {
+    color: #1e8e3e;
+}
+
+.seo-agent-connect-status.disconnected .dashicons {
+    color: #c0392b;
+}
+
+.seo-agent-connect-status strong {
+    font-size: 14px;
+}
+
+.seo-agent-google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #4285f4;
+    color: #fff !important;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .15s;
+}
+
+.seo-agent-google-btn:hover {
+    background: #3367d6;
+    color: #fff !important;
+}
+
+.seo-agent-google-btn svg {
+    flex-shrink: 0;
+}
+
+.seo-agent-redirect-uri {
+    font-family: monospace;
+    font-size: 13px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    padding: 6px 10px;
+    display: inline-block;
+    word-break: break-all;
+}
+
+/* -----------------------------------------------------------------------
+   Autopilot badge / toggle
+   ----------------------------------------------------------------------- */
+.seo-agent-autopilot-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.seo-agent-autopilot-badge.on {
+    background: #e6f4ea;
+    color: #137333;
+    border: 1px solid #b7dfbe;
+}
+
+.seo-agent-autopilot-badge.off {
+    background: #f0f0f1;
+    color: #50575e;
+    border: 1px solid #c3c4c7;
+}
+
+.seo-agent-autopilot-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.seo-agent-autopilot-badge.on .dot  { background: #137333; }
+.seo-agent-autopilot-badge.off .dot { background: #8c8f94; }
+
+/* -----------------------------------------------------------------------
+   Confidence meter
+   ----------------------------------------------------------------------- */
+.seo-agent-confidence {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.seo-agent-confidence-bar {
+    display: inline-block;
+    width: 60px;
+    height: 6px;
+    background: #dcdcde;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.seo-agent-confidence-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: #2271b1;
+    transition: width .3s;
+}
+
+.seo-agent-confidence-fill.high   { background: #1e8e3e; }
+.seo-agent-confidence-fill.medium { background: #e1940a; }
+.seo-agent-confidence-fill.low    { background: #c0392b; }
+
+/* -----------------------------------------------------------------------
+   Recommendation cards on overview page
+   ----------------------------------------------------------------------- */
+.seo-agent-rec {
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+
+.seo-agent-rec-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.seo-agent-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.seo-agent-pill.safe    { background: #e6f4ea; color: #137333; }
+.seo-agent-pill.risky   { background: #fce8e6; color: #c5221f; }
+.seo-agent-pill.high    { background: #fce8e6; color: #c5221f; }
+.seo-agent-pill.medium  { background: #fef7e0; color: #b06000; }
+.seo-agent-pill.low     { background: #e8f0fe; color: #1967d2; }
+.seo-agent-pill.none    { background: #f0f0f1; color: #50575e; }
+
+.seo-agent-rec-reason {
+    color: #3c434a;
+    font-size: 13px;
+    margin: 0 0 8px;
+}
+
+.seo-agent-rec-proposed {
+    background: #f0f6fc;
+    border-left: 3px solid #2271b1;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    border-radius: 0 3px 3px 0;
+    font-size: 13px;
+}
+
+.seo-agent-rec-proposed strong {
+    display: block;
+    margin-bottom: 2px;
+    color: #1d2327;
+}
+
+/* -----------------------------------------------------------------------
+   Activity report table
+   ----------------------------------------------------------------------- */
+.seo-agent-report-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+}
+
+.seo-agent-report-filters label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #50575e;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.seo-agent-report-filters select,
+.seo-agent-report-filters input[type="date"] {
+    font-size: 13px;
+    min-width: 140px;
+}
+
+.seo-agent-diff-block {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.seo-agent-diff-before,
+.seo-agent-diff-after {
+    padding: 6px 10px;
+    border-radius: 3px;
+    font-size: 12px;
+    word-break: break-word;
+}
+
+.seo-agent-diff-before {
+    background: #fce8e6;
+    border: 1px solid #f5c6c3;
+}
+
+.seo-agent-diff-after {
+    background: #e6f4ea;
+    border: 1px solid #b7dfbe;
+}
+
+.seo-agent-diff-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: 3px;
+    opacity: .7;
+}
+
+/* -----------------------------------------------------------------------
+   Status badges for report table
+   ----------------------------------------------------------------------- */
+.seo-agent-status {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+}
+
+.seo-agent-status.applied      { background: #e6f4ea; color: #137333; }
+.seo-agent-status.rolled_back  { background: #fef7e0; color: #b06000; }
+.seo-agent-status.skipped      { background: #f0f0f1; color: #50575e; }
+
+/* -----------------------------------------------------------------------
+   Stats header row
+   ----------------------------------------------------------------------- */
+.seo-agent-stats-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.seo-agent-stat-box {
+    flex: 1;
+    min-width: 130px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 14px 18px;
+    text-align: center;
+}
+
+.seo-agent-stat-box .stat-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: #1d2327;
+    line-height: 1.2;
+}
+
+.seo-agent-stat-box .stat-label {
+    font-size: 11px;
+    color: #646970;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-top: 4px;
+}
+
+/* -----------------------------------------------------------------------
+   Settings page — sections
+   ----------------------------------------------------------------------- */
+.seo-agent-settings-section {
+    margin-bottom: 28px;
+}
+
+.seo-agent-settings-section h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 1px solid #f0f0f1;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+}
+
+/* -----------------------------------------------------------------------
+   Rollback panel
+   ----------------------------------------------------------------------- */
+.seo-agent-rollback-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.seo-agent-rollback-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f1;
+    font-size: 13px;
+}
+
+.seo-agent-rollback-list li:last-child {
+    border-bottom: none;
+}
+
+/* -----------------------------------------------------------------------
+   Misc utilities
+   ----------------------------------------------------------------------- */
+.seo-agent-muted {
+    color: #8c8f94;
+    font-size: 12px;
+}
+
+.seo-agent-mono {
+    font-family: monospace;
+    font-size: 12px;
+    color: #3c434a;
+}
