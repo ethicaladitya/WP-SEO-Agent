@@ -579,11 +579,11 @@ class SEO_Agent_AI_Plugin {
 		$client_id      = isset( $_POST['google_client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['google_client_id'] ) ) : '';
 		$client_secret  = isset( $_POST['google_client_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['google_client_secret'] ) ) : '';
 		$gsc_site_url   = isset( $_POST['gsc_site_url'] ) ? sanitize_text_field( wp_unslash( $_POST['gsc_site_url'] ) ) : '';
-		$ga4_property   = isset( $_POST['ga4_property_id'] ) ? preg_replace( '/[^0-9]/', '', (string) wp_unslash( $_POST['ga4_property_id'] ) ) : '';
+		$ga4_property   = isset( $_POST['ga4_property_id'] ) ? preg_replace( '/[^0-9]/', '', sanitize_text_field( wp_unslash( $_POST['ga4_property_id'] ) ) ) : '';
 		$gemini_key     = isset( $_POST['gemini_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['gemini_api_key'] ) ) : '';
 		$autopilot      = ! empty( $_POST['autopilot_enabled'] );
 		$max_daily      = isset( $_POST['autopilot_max_daily'] ) ? max( 1, min( 50, absint( $_POST['autopilot_max_daily'] ) ) ) : 5;
-		$min_conf       = isset( $_POST['autopilot_min_confidence'] ) ? round( min( 1.0, max( 0.1, (float) wp_unslash( $_POST['autopilot_min_confidence'] ) ) ), 2 ) : 0.7;
+		$min_conf       = isset( $_POST['autopilot_min_confidence'] ) ? round( min( 1.0, max( 0.1, (float) sanitize_text_field( wp_unslash( $_POST['autopilot_min_confidence'] ) ) ) ), 2 ) : 0.7;
 		$log_retention  = isset( $_POST['log_retention_days'] ) ? max( 7, min( 730, absint( $_POST['log_retention_days'] ) ) ) : 90;
 
 		// Only update client credentials if the user typed something (avoid wiping with empty strings).

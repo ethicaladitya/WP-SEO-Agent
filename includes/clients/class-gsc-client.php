@@ -102,7 +102,11 @@ class SEO_Agent_AI_GSC_Client
 
         return new WP_Error(
             'seo_agent_ai_gsc_property_not_found',
-            sprintf(__('Connected to Search Console, but the configured property was not found: %s', 'seo-agent-ai'), $site_url)
+            sprintf(
+                /* translators: %s: configured Search Console property URL. */
+                __('Connected to Search Console, but the configured property was not found: %s', 'seo-agent-ai'),
+                $site_url
+            )
         );
     }
 

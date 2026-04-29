@@ -226,10 +226,10 @@ class SEO_Agent_AI_Activity_Log {
 	public function get_entry( $id ) {
 		global $wpdb;
 
-		$row = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->prepare( 'SELECT * FROM ' . self::get_table_name() . ' WHERE id = %d', (int) $id ),
-			ARRAY_A
-		);
+		$table = self::get_table_name();
+		$sql   = $wpdb->prepare( "SELECT * FROM `{$table}` WHERE id = %d", (int) $id ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		$row = $wpdb->get_row( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
 		if ( ! is_array( $row ) ) {
 			return null;
@@ -252,13 +252,10 @@ class SEO_Agent_AI_Activity_Log {
 		global $wpdb;
 
 		$cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
+		$table  = self::get_table_name();
+		$sql    = $wpdb->prepare( "DELETE FROM `{$table}` WHERE created_at < %s", $cutoff ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->prepare(
-				'DELETE FROM ' . self::get_table_name() . ' WHERE created_at < %s',
-				$cutoff
-			)
-		);
+		$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	// -----------------------------------------------------------------------

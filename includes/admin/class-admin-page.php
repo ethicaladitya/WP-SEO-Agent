@@ -491,7 +491,15 @@ class SEO_Agent_AI_Admin_Page {
 					<h2><?php esc_html_e( 'Data Sources', 'seo-agent-ai' ); ?></h2>
 					<?php if ( ! $is_connected ) : ?>
 						<div class="notice notice-warning inline" style="margin:0 0 14px;">
-							<p><?php printf( esc_html__( 'Connect your Google account to load available properties automatically. %s', 'seo-agent-ai' ), '<a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-connect' ) ) . '">' . esc_html__( 'Connect Google', 'seo-agent-ai' ) . '</a>' ); ?></p>
+							<p>
+								<?php
+								printf(
+									/* translators: %s: HTML link to the Connect Google page. */
+									esc_html__( 'Connect your Google account to load available properties automatically. %s', 'seo-agent-ai' ),
+									'<a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-connect' ) ) . '">' . esc_html__( 'Connect Google', 'seo-agent-ai' ) . '</a>'
+								);
+								?>
+							</p>
 						</div>
 					<?php endif; ?>
 					<table class="form-table" role="presentation">
