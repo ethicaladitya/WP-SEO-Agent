@@ -40,6 +40,10 @@ class SEO_Agent_AI_Connect_Page {
 		$email         = $this->oauth->get_connected_email();
 		$redirect_uri  = $this->oauth->get_redirect_uri();
 
+		// Always-visible auth health probe. Cached for 60s in a transient so
+		// repeated page loads don't hit Google's token endpoint each time.
+		$health = $this->probe_auth_health();
+
 		// Notice from a previous action (e.g. disconnect, connect).
 		$notice = filter_input( INPUT_GET, 'seo_agent_ai_notice', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$notice = is_string( $notice ) ? sanitize_key( wp_unslash( $notice ) ) : '';
@@ -64,6 +68,30 @@ class SEO_Agent_AI_Connect_Page {
 
 			<?php if ( 'google_connected' === $notice ) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Google account connected successfully!', 'seo-agent-ai' ); ?></p></div>
+			<?php endif; ?>
+
+			<?php if ( $is_connected && ! $health['ok'] ) : ?>
+				<div class="notice notice-error">
+					<p>
+						<strong><?php esc_html_e( 'Authentication is failing:', 'seo-agent-ai' ); ?></strong>
+						<?php echo esc_html( $health['message'] ); ?>
+					</p>
+					<?php if ( false !== strpos( strtolower( $health['message'] ), 'client secret' ) ) : ?>
+						<p>
+							<strong><?php esc_html_e( 'Most likely cause:', 'seo-agent-ai' ); ?></strong>
+							<?php esc_html_e( 'The OAuth client secret stored here does not match what Google has on file. Rotate or regenerate the secret in Google Cloud Console, paste the new value into Settings, then click Disconnect + Sign in with Google again.', 'seo-agent-ai' ); ?>
+						</p>
+					<?php elseif ( false !== strpos( strtolower( $health['message'] ), 'invalid_grant' ) || false !== strpos( strtolower( $health['message'] ), 'refresh' ) ) : ?>
+						<p>
+							<strong><?php esc_html_e( 'Most likely cause:', 'seo-agent-ai' ); ?></strong>
+							<?php esc_html_e( 'The refresh token has been revoked. Click Disconnect + Sign in with Google to re-authorize.', 'seo-agent-ai' ); ?>
+						</p>
+					<?php endif; ?>
+				</div>
+			<?php elseif ( $is_connected && $health['ok'] ) : ?>
+				<div class="notice notice-success">
+					<p><?php esc_html_e( 'Authentication health check passed: access token can be refreshed successfully.', 'seo-agent-ai' ); ?></p>
+				</div>
 			<?php endif; ?>
 
 			<!-- Connection status card -->
@@ -164,4 +192,33 @@ class SEO_Agent_AI_Connect_Page {
 	// Internal helpers
 	// -----------------------------------------------------------------------
 
+	/**
+	 * Quick auth-health probe used to render the persistent error banner on
+	 * the Connect page. Cached in a 60-second transient so we never hit
+	 * Google's token endpoint more than once a minute on page reloads.
+	 *
+	 * @return array{ok:bool,message:string}
+	 */
+	private function probe_auth_health() {
+		$cache_key = 'seo_agent_ai_auth_health';
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['ok'], $cached['message'] ) ) {
+			return $cached;
+		}
+
+		if ( ! $this->oauth->is_connected() ) {
+			$out = array( 'ok' => false, 'message' => __( 'No refresh token stored. Sign in with Google.', 'seo-agent-ai' ) );
+			set_transient( $cache_key, $out, MINUTE_IN_SECONDS );
+			return $out;
+		}
+
+		$token = $this->oauth->get_access_token();
+		if ( is_wp_error( $token ) ) {
+			$out = array( 'ok' => false, 'message' => $token->get_error_message() );
+		} else {
+			$out = array( 'ok' => true, 'message' => '' );
+		}
+		set_transient( $cache_key, $out, MINUTE_IN_SECONDS );
+		return $out;
+	}
 }

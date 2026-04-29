@@ -4,7 +4,7 @@ Tags: seo, analytics, search-console, ga4, recommendations
 Requires at least: 6.4
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.1.0
+Stable tag: 2.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -73,6 +73,10 @@ Yes. Uninstalling removes the activity log table, every plugin option, every plu
 
 == Changelog ==
 
+= 2.1.1 =
+* Always-visible authentication health banner on the Connect page that explains the most likely cause when token refresh fails (rotated client secret vs revoked refresh token).
+* Health probe result cached for 60 seconds so reloading does not hit Google's token endpoint repeatedly.
+
 = 2.1.0 =
 * Added uninstall.php for clean removal of all options, post meta, transients, custom table, and cron.
 * Encrypted Gemini API key at rest using shared crypto helper.
@@ -95,6 +99,9 @@ Yes. Uninstalling removes the activity log table, every plugin option, every plu
 * Initial production release with analysis, recommendations, and safe metadata execution.
 
 == Upgrade Notice ==
+
+= 2.1.1 =
+Adds an always-visible authentication health banner on the Connect page so credential failures are obvious without clicking Test Connection.
 
 = 2.1.0 =
 Hardening release: clean uninstall, encrypted API key storage, automatic schema upgrade, full rollback parity across SEO plugins, async manual analysis, persistent error notices.

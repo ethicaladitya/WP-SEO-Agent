@@ -43,6 +43,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_activity_db_v',
 		'seo_agent_ai_consecutive_api_failures',
 		'seo_agent_ai_last_api_error',
+		'seo_agent_ai_auth_health',
 	);
 
 	foreach ( $seo_agent_ai_options as $seo_agent_ai_option ) {

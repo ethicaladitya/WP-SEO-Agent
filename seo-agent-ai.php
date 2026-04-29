@@ -3,7 +3,7 @@
  * Plugin Name:       SEO Agent AI
  * Plugin URI:        https://adityashah.blog/seo-agent-ai/
  * Description:       Autonomous SEO agent — continuously analyzes Search Console and GA4 signals, then proposes prioritized SEO recommendations with full audit trail and optional autopilot.
- * Version:           2.1.0
+ * Version:           2.1.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            SEO Agent AI
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEO_AGENT_AI_VERSION',     '2.1.0' );
+define( 'SEO_AGENT_AI_VERSION',     '2.1.1' );
 define( 'SEO_AGENT_AI_PLUGIN_FILE', __FILE__ );
 define( 'SEO_AGENT_AI_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'SEO_AGENT_AI_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
