@@ -9,9 +9,13 @@ class SEO_Agent_AI_Fix_Executor
     /** @var SEO_Agent_AI_Activity_Log */
     private $activity_log;
 
-    public function __construct(SEO_Agent_AI_Activity_Log $activity_log)
+    /** @var SEO_Agent_AI_SEO_Plugin_Bridge */
+    private $bridge;
+
+    public function __construct(SEO_Agent_AI_Activity_Log $activity_log, SEO_Agent_AI_SEO_Plugin_Bridge $bridge)
     {
         $this->activity_log = $activity_log;
+        $this->bridge       = $bridge;
     }
 
     /**
@@ -61,11 +65,10 @@ class SEO_Agent_AI_Fix_Executor
 
         if ($new_title !== '') {
             $bounded_title = $this->bounded_value($new_title, 60);
-            $prev_title    = (string) get_post_meta($post_id, '_seo_agent_ai_meta_title', true);
+            $prev_title    = $this->bridge->get_meta_title($post_id);
 
-            update_post_meta($post_id, '_seo_agent_ai_meta_title', $bounded_title);
-            update_post_meta($post_id, '_yoast_wpseo_title', $bounded_title);
-            update_post_meta($post_id, 'rank_math_title', $bounded_title);
+            // Write to our own meta + all active SEO plugin meta keys.
+            $this->bridge->set_meta_title($post_id, $bounded_title);
 
             $this->activity_log->log(
                 $post_id, $type, 'meta_title',
@@ -77,11 +80,10 @@ class SEO_Agent_AI_Fix_Executor
 
         if ($new_description !== '') {
             $bounded_desc = $this->bounded_value($new_description, 155);
-            $prev_desc    = (string) get_post_meta($post_id, '_seo_agent_ai_meta_description', true);
+            $prev_desc    = $this->bridge->get_meta_description($post_id);
 
-            update_post_meta($post_id, '_seo_agent_ai_meta_description', $bounded_desc);
-            update_post_meta($post_id, '_yoast_wpseo_metadesc', $bounded_desc);
-            update_post_meta($post_id, 'rank_math_description', $bounded_desc);
+            // Write to our own meta + all active SEO plugin meta keys.
+            $this->bridge->set_meta_description($post_id, $bounded_desc);
 
             $this->activity_log->log(
                 $post_id, $type, 'meta_description',
@@ -89,6 +91,11 @@ class SEO_Agent_AI_Fix_Executor
                 $reason, $signal_data,
                 $confidence, $triggered_by
             );
+        }
+
+        // Write focus keyword if the recommendation provides one.
+        if (isset($proposed['focus_keyword']) && $proposed['focus_keyword'] !== '') {
+            $this->bridge->set_focus_keyword($post_id, sanitize_text_field($proposed['focus_keyword']));
         }
 
         update_post_meta($post_id, '_seo_agent_ai_last_applied_at', current_time('mysql'));
@@ -111,19 +118,12 @@ class SEO_Agent_AI_Fix_Executor
 
         $latest = end($history);
 
-        $fields = array(
-            '_seo_agent_ai_meta_title'       => 'meta_title',
-            '_seo_agent_ai_meta_description' => 'meta_description',
-            '_yoast_wpseo_title'             => 'yoast_meta_title',
-            '_yoast_wpseo_metadesc'          => 'yoast_meta_description',
-            'rank_math_title'                => 'rank_math_title',
-            'rank_math_description'          => 'rank_math_description',
-        );
-
-        foreach ($fields as $meta_key => $backup_key) {
-            if (isset($latest[$backup_key])) {
-                update_post_meta($post_id, $meta_key, (string) $latest[$backup_key]);
+        // Restore every key that was backed up (covers all known SEO plugins).
+        foreach ($latest as $meta_key => $value) {
+            if ($meta_key === 'captured_at') {
+                continue;
             }
+            update_post_meta($post_id, $meta_key, (string) $value);
         }
 
         // Remove the entry we just restored from the history stack.
@@ -140,15 +140,14 @@ class SEO_Agent_AI_Fix_Executor
             $history = array();
         }
 
-        $history[] = array(
-            'captured_at' => current_time('mysql'),
-            'meta_title' => (string) get_post_meta($post_id, '_seo_agent_ai_meta_title', true),
-            'meta_description' => (string) get_post_meta($post_id, '_seo_agent_ai_meta_description', true),
-            'yoast_meta_title' => (string) get_post_meta($post_id, '_yoast_wpseo_title', true),
-            'yoast_meta_description' => (string) get_post_meta($post_id, '_yoast_wpseo_metadesc', true),
-            'rank_math_title' => (string) get_post_meta($post_id, 'rank_math_title', true),
-            'rank_math_description' => (string) get_post_meta($post_id, 'rank_math_description', true),
-        );
+        // Back up all known SEO plugin meta keys so any plugin can be restored.
+        $snap = array('captured_at' => current_time('mysql'));
+        $title_keys = $this->bridge->get_all_backup_keys('title');
+        $desc_keys  = $this->bridge->get_all_backup_keys('description');
+        foreach (array_merge($title_keys, $desc_keys) as $key) {
+            $snap[$key] = (string) get_post_meta($post_id, $key, true);
+        }
+        $history[] = $snap;
 
         if (count($history) > 20) {
             $history = array_slice($history, -20);

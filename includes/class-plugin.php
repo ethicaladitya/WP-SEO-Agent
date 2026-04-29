@@ -18,6 +18,12 @@ class SEO_Agent_AI_Plugin {
 	const ANALYSIS_LOCK_TTL          = 15 * MINUTE_IN_SECONDS;
 	const CONNECTION_TEST_TRANSIENT  = 'seo_agent_ai_connection_test_result';
 	const DAILY_AP_TRANSIENT_PREFIX  = 'seo_agent_ai_ap_count_';
+	const BATCH_ANALYSIS_KEY         = 'seo_agent_ai_batch_state';
+	const OPTION_API_FAILURES        = 'seo_agent_ai_consecutive_api_failures';
+	const OPTION_LAST_API_ERROR      = 'seo_agent_ai_last_api_error';
+	const API_FAILURE_NOTICE_AFTER   = 2;
+	const CRON_HOOK_DAILY            = 'seo_agent_ai_daily_analysis';
+	const CRON_HOOK_MANUAL           = 'seo_agent_ai_run_manual_analysis';
 
 	private static $instance = null;
 
@@ -45,6 +51,12 @@ class SEO_Agent_AI_Plugin {
 	/** @var SEO_Agent_AI_Activity_Log */
 	private $activity_log;
 
+	/** @var SEO_Agent_AI_SEO_Plugin_Bridge */
+	private $bridge;
+
+	/** @var SEO_Agent_AI_Gemini_Client */
+	private $gemini;
+
 	/** @var SEO_Agent_AI_Admin_Page */
 	private $admin_page;
 
@@ -62,12 +74,14 @@ class SEO_Agent_AI_Plugin {
 	private function __construct() {
 		$this->data_store            = new SEO_Agent_AI_Data_Store();
 		$this->oauth                 = new SEO_Agent_AI_Google_OAuth();
+		$this->bridge                = new SEO_Agent_AI_SEO_Plugin_Bridge();
+		$this->gemini                = new SEO_Agent_AI_Gemini_Client();
 		$this->gsc_client            = new SEO_Agent_AI_GSC_Client( $this->oauth );
 		$this->ga4_client            = new SEO_Agent_AI_GA4_Client( $this->oauth );
 		$this->analyzer              = new SEO_Agent_AI_SEO_Analyzer();
-		$this->recommendation_engine = new SEO_Agent_AI_Recommendation_Engine();
+		$this->recommendation_engine = new SEO_Agent_AI_Recommendation_Engine( $this->gemini );
 		$this->activity_log          = new SEO_Agent_AI_Activity_Log();
-		$this->fix_executor          = new SEO_Agent_AI_Fix_Executor( $this->activity_log );
+		$this->fix_executor          = new SEO_Agent_AI_Fix_Executor( $this->activity_log, $this->bridge );
 
 		$connect_page      = new SEO_Agent_AI_Connect_Page( $this->oauth );
 		$report_page       = new SEO_Agent_AI_Report_Page( $this->activity_log, $this->data_store );
@@ -75,7 +89,8 @@ class SEO_Agent_AI_Plugin {
 			$this->data_store,
 			$connect_page,
 			$report_page,
-			$this->oauth
+			$this->oauth,
+			$this->bridge
 		);
 
 		// Admin hooks.
@@ -95,8 +110,19 @@ class SEO_Agent_AI_Plugin {
 		add_action( 'wp_ajax_seo_agent_ai_list_gsc_sites',      array( $this, 'ajax_list_gsc_sites' ) );
 		add_action( 'wp_ajax_seo_agent_ai_list_ga4_properties', array( $this, 'ajax_list_ga4_properties' ) );
 
-		// Cron hook.
-		add_action( 'seo_agent_ai_daily_analysis', array( $this, 'run_daily_analysis' ) );
+		// AJAX: interactive batch analysis.
+		add_action( 'wp_ajax_seo_agent_ai_analyze_batch', array( $this, 'ajax_analyze_batch' ) );
+
+		// Cron hooks.
+		add_action( self::CRON_HOOK_DAILY,  array( $this, 'run_daily_analysis' ) );
+		add_action( self::CRON_HOOK_MANUAL, array( $this, 'run_daily_analysis' ) );
+
+		// Defensive: re-add cron schedule on every load if it ever drops off
+		// (migrations, clones, manually-cleared cron).
+		add_action( 'init', array( $this, 'ensure_daily_cron' ) );
+
+		// Persistent admin notice when GSC/GA4 fails repeatedly.
+		add_action( 'admin_notices', array( $this, 'maybe_render_api_failure_notice' ) );
 	}
 
 	// -------------------------------------------------------------------
@@ -106,17 +132,35 @@ class SEO_Agent_AI_Plugin {
 	public static function activate() {
 		SEO_Agent_AI_Activity_Log::create_table();
 
-		if ( ! wp_next_scheduled( 'seo_agent_ai_daily_analysis' ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'seo_agent_ai_daily_analysis' );
+		if ( ! wp_next_scheduled( self::CRON_HOOK_DAILY ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK_DAILY );
 		}
 
 		add_option( SEO_Agent_AI_Data_Store::OPTION_LAST_RUN, array(), '', false );
 	}
 
 	public static function deactivate() {
-		$timestamp = wp_next_scheduled( 'seo_agent_ai_daily_analysis' );
-		if ( $timestamp ) {
-			wp_unschedule_event( $timestamp, 'seo_agent_ai_daily_analysis' );
+		wp_clear_scheduled_hook( self::CRON_HOOK_DAILY );
+		wp_clear_scheduled_hook( self::CRON_HOOK_MANUAL );
+	}
+
+	/**
+	 * Run on plugins_loaded — applies any pending DB schema upgrade so that
+	 * users who update via WP.org auto-update never end up on a stale schema.
+	 */
+	public static function maybe_upgrade() {
+		$installed = (int) get_option( SEO_Agent_AI_Activity_Log::DB_VERSION_OPTION, 0 );
+		if ( $installed < SEO_Agent_AI_Activity_Log::DB_VERSION ) {
+			SEO_Agent_AI_Activity_Log::create_table();
+		}
+	}
+
+	/**
+	 * Defensive cron rescheduling — survives migrations, clones, manual purges.
+	 */
+	public function ensure_daily_cron() {
+		if ( ! wp_next_scheduled( self::CRON_HOOK_DAILY ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK_DAILY );
 		}
 	}
 
@@ -129,8 +173,16 @@ class SEO_Agent_AI_Plugin {
 			wp_die( esc_html__( 'Unauthorized.', 'seo-agent-ai' ) );
 		}
 		check_admin_referer( 'seo_agent_ai_run_analysis' );
-		$this->run_daily_analysis();
-		wp_safe_redirect( add_query_arg( 'seo_agent_ai_notice', 'analysis_complete', admin_url( 'admin.php?page=seo-agent-ai' ) ) );
+
+		// Schedule a one-shot cron event instead of running the full
+		// per-post Google API loop synchronously inside this admin-post
+		// request — that would block the admin UI and time out on slow
+		// hosts. The same handler runs the analysis when cron fires.
+		if ( ! wp_next_scheduled( self::CRON_HOOK_MANUAL ) ) {
+			wp_schedule_single_event( time() + 5, self::CRON_HOOK_MANUAL );
+		}
+
+		wp_safe_redirect( add_query_arg( 'seo_agent_ai_notice', 'analysis_scheduled', admin_url( 'admin.php?page=seo-agent-ai' ) ) );
 		exit;
 	}
 
@@ -143,12 +195,12 @@ class SEO_Agent_AI_Plugin {
 			return;
 		}
 
-		$started_at       = current_time( 'mysql' );
-		$processed        = 0;
-		$with_recs        = 0;
-		$failed           = 0;
-		$autopilot        = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
-		$log_retention    = (int) get_option( 'seo_agent_ai_log_retention_days', 90 );
+		$started_at    = current_time( 'mysql' );
+		$processed     = 0;
+		$with_recs     = 0;
+		$failed        = 0;
+		$autopilot     = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
+		$log_retention = (int) get_option( 'seo_agent_ai_log_retention_days', 90 );
 
 		try {
 			$posts = get_posts( array(
@@ -161,67 +213,26 @@ class SEO_Agent_AI_Plugin {
 
 			foreach ( $posts as $post ) {
 				$processed++;
-				$url = get_permalink( $post );
-				if ( ! $url ) {
-					continue;
-				}
-
-				$gsc_metrics = $this->gsc_client->get_page_metrics( $url );
-				$ga4_metrics = $this->ga4_client->get_page_metrics( $url );
-
-				if ( is_wp_error( $gsc_metrics ) || is_wp_error( $ga4_metrics ) ) {
+				$result = $this->analyze_single_post( $post, $autopilot );
+				if ( $result['had_api_failure'] ) {
 					$failed++;
-					$this->data_store->save_post_metrics( (int) $post->ID, array(
-						'gsc_error'  => is_wp_error( $gsc_metrics ) ? $gsc_metrics->get_error_message() : '',
-						'ga4_error'  => is_wp_error( $ga4_metrics ) ? $ga4_metrics->get_error_message() : '',
-						'analysis'   => array(
-							'signals'    => array(
-								'content_refresh_needed'  => false,
-								'title_meta_optimization' => false,
-								'intent_mismatch'         => false,
-								'declining_performance'   => false,
-							),
-							'severity'   => 'none',
-							'confidence' => 0.0,
-							'evidence'   => array(),
-						),
-						'updated_at' => current_time( 'mysql' ),
-					) );
-					$this->data_store->save_recommendations( (int) $post->ID, array() );
-					continue;
 				}
-
-				$analysis        = $this->analyzer->analyze( $post, $gsc_metrics, $ga4_metrics );
-				$recommendations = $this->recommendation_engine->generate( $post, $analysis, $gsc_metrics, $ga4_metrics );
-
-				if ( ! empty( $recommendations ) ) {
+				if ( $result['had_recommendations'] ) {
 					$with_recs++;
-				}
-
-				$this->data_store->save_post_metrics( (int) $post->ID, array(
-					'gsc'        => $gsc_metrics,
-					'ga4'        => $ga4_metrics,
-					'analysis'   => $analysis,
-					'updated_at' => current_time( 'mysql' ),
-				) );
-				$this->data_store->save_recommendations( (int) $post->ID, $recommendations );
-
-				// Autopilot: auto-apply safe recommendations above confidence threshold.
-				if ( $autopilot && ! empty( $recommendations ) ) {
-					$this->maybe_autopilot_apply( (int) $post->ID, $recommendations, $analysis );
 				}
 			}
 
+			$this->update_api_failure_tracker( $processed, $failed );
+
 			$this->data_store->set_last_run( array(
-				'started_at'                  => $started_at,
-				'finished_at'                 => current_time( 'mysql' ),
-				'processed_posts'             => $processed,
-				'posts_with_recommendations'  => $with_recs,
-				'failed_posts'                => $failed,
-				'mode'                        => wp_doing_cron() ? 'cron' : 'manual',
+				'started_at'                 => $started_at,
+				'finished_at'                => current_time( 'mysql' ),
+				'processed_posts'            => $processed,
+				'posts_with_recommendations' => $with_recs,
+				'failed_posts'               => $failed,
+				'mode'                       => wp_doing_cron() ? 'cron' : 'manual',
 			) );
 
-			// Purge old activity log entries.
 			if ( $log_retention > 0 ) {
 				$this->activity_log->purge_old_entries( $log_retention );
 			}
@@ -230,6 +241,158 @@ class SEO_Agent_AI_Plugin {
 			$this->release_lock();
 		}
 	}
+
+	// -------------------------------------------------------------------
+	// Per-post analysis (shared by cron, manual, and batch AJAX)
+	// -------------------------------------------------------------------
+
+	private function analyze_single_post( WP_Post $post, $autopilot = false ) {
+		$url = get_permalink( $post );
+		if ( ! $url ) {
+			return array( 'had_recommendations' => false, 'had_api_failure' => false );
+		}
+
+		$gsc_metrics = $this->gsc_client->get_page_metrics( $url );
+		$ga4_metrics = $this->ga4_client->get_page_metrics( $url );
+
+		// Baseline SEO audit is always run — it does not need API data.
+		$seo_audit = $this->bridge->audit_post( (int) $post->ID, $post );
+
+		$had_api_failure = is_wp_error( $gsc_metrics ) || is_wp_error( $ga4_metrics );
+		$gsc_safe        = is_wp_error( $gsc_metrics ) ? array() : $gsc_metrics;
+		$ga4_safe        = is_wp_error( $ga4_metrics ) ? array() : $ga4_metrics;
+
+		if ( $had_api_failure ) {
+			$msg = is_wp_error( $gsc_metrics ) ? $gsc_metrics->get_error_message() : '';
+			if ( $msg === '' && is_wp_error( $ga4_metrics ) ) {
+				$msg = $ga4_metrics->get_error_message();
+			}
+			update_option( self::OPTION_LAST_API_ERROR, $msg, false );
+		}
+
+		$analysis        = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
+		$recommendations = $this->recommendation_engine->generate( $post, $analysis, $gsc_safe, $ga4_safe, $seo_audit );
+
+		$metrics = array(
+			'gsc'        => $gsc_safe,
+			'ga4'        => $ga4_safe,
+			'analysis'   => $analysis,
+			'updated_at' => current_time( 'mysql' ),
+		);
+		if ( is_wp_error( $gsc_metrics ) ) {
+			$metrics['gsc_error'] = $gsc_metrics->get_error_message();
+		}
+		if ( is_wp_error( $ga4_metrics ) ) {
+			$metrics['ga4_error'] = $ga4_metrics->get_error_message();
+		}
+
+		$this->data_store->save_post_metrics( (int) $post->ID, $metrics );
+		$this->data_store->save_recommendations( (int) $post->ID, $recommendations );
+
+		$had_recs = ! empty( $recommendations );
+		if ( $autopilot && $had_recs ) {
+			$this->maybe_autopilot_apply( (int) $post->ID, $recommendations, $analysis );
+		}
+
+		return array(
+			'had_recommendations' => $had_recs,
+			'had_api_failure'     => $had_api_failure,
+			'title'               => $post->post_title,
+		);
+	}
+
+	// -------------------------------------------------------------------
+	// AJAX: interactive batch analysis
+	// -------------------------------------------------------------------
+
+	public function ajax_analyze_batch() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Unauthorized', 403 );
+			return;
+		}
+		check_ajax_referer( 'seo_agent_ai_analyze_batch' );
+
+		if ( get_transient( self::ANALYSIS_LOCK_KEY ) ) {
+			wp_send_json_error( __( 'Analysis already in progress (scheduled task). Please wait.', 'seo-agent-ai' ) );
+			return;
+		}
+
+		$offset     = isset( $_POST['offset'] ) ? absint( $_POST['offset'] ) : 0;
+		$batch_size = 5;
+		$autopilot  = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
+
+		$posts = get_posts( array(
+			'post_type'   => 'post',
+			'post_status' => 'publish',
+			'numberposts' => 50,
+			'orderby'     => 'modified',
+			'order'       => 'DESC',
+		) );
+
+		$total = count( $posts );
+
+		if ( $offset === 0 ) {
+			$state = array(
+				'with_recs'  => 0,
+				'failed'     => 0,
+				'started_at' => current_time( 'mysql' ),
+			);
+			set_transient( self::BATCH_ANALYSIS_KEY, $state, 30 * MINUTE_IN_SECONDS );
+		} else {
+			$state = get_transient( self::BATCH_ANALYSIS_KEY );
+			if ( ! is_array( $state ) ) {
+				$state = array( 'with_recs' => 0, 'failed' => 0, 'started_at' => current_time( 'mysql' ) );
+			}
+		}
+
+		$batch         = array_slice( $posts, $offset, $batch_size );
+		$current_title = '';
+
+		foreach ( $batch as $post ) {
+			$current_title = $post->post_title;
+			$result        = $this->analyze_single_post( $post, $autopilot );
+			if ( $result['had_api_failure'] ) {
+				$state['failed']++;
+			}
+			if ( $result['had_recommendations'] ) {
+				$state['with_recs']++;
+			}
+		}
+
+		$processed = min( $offset + count( $batch ), $total );
+		$done      = ( $processed >= $total );
+
+		set_transient( self::BATCH_ANALYSIS_KEY, $state, 30 * MINUTE_IN_SECONDS );
+
+		if ( $done ) {
+			$this->data_store->set_last_run( array(
+				'started_at'                 => $state['started_at'],
+				'finished_at'                => current_time( 'mysql' ),
+				'processed_posts'            => $total,
+				'posts_with_recommendations' => (int) $state['with_recs'],
+				'failed_posts'               => (int) $state['failed'],
+				'mode'                       => 'manual',
+			) );
+			$log_retention = (int) get_option( 'seo_agent_ai_log_retention_days', 90 );
+			if ( $log_retention > 0 ) {
+				$this->activity_log->purge_old_entries( $log_retention );
+			}
+			$this->update_api_failure_tracker( $total, (int) $state['failed'] );
+			delete_transient( self::BATCH_ANALYSIS_KEY );
+		}
+
+		wp_send_json_success( array(
+			'processed'     => $processed,
+			'total'         => $total,
+			'percent'       => $total > 0 ? (int) round( ( $processed / $total ) * 100 ) : 100,
+			'done'          => $done,
+			'current_title' => $current_title,
+			'with_recs'     => (int) $state['with_recs'],
+			'failed'        => (int) $state['failed'],
+		) );
+	}
+
+
 
 	// -------------------------------------------------------------------
 	// Autopilot: auto-apply safe recommendations
@@ -368,31 +531,34 @@ class SEO_Agent_AI_Plugin {
 		$field  = (string) $entry['field_changed'];
 		$before = (string) $entry['value_before'];
 
-		// Restore the specific field that was changed.
-		$field_map = array(
-			'meta_title'       => array( '_seo_agent_ai_meta_title', '_yoast_wpseo_title', 'rank_math_title' ),
-			'meta_description' => array( '_seo_agent_ai_meta_description', '_yoast_wpseo_metadesc', 'rank_math_description' ),
+		// Map the audit-log field name to the bridge-level field key,
+		// then ask the bridge for every meta key it would have written
+		// across all detected SEO plugins. This keeps rollback parity
+		// with apply (Yoast / RankMath / SmartCrawl / SEO Framework).
+		$bridge_field_map = array(
+			'meta_title'       => 'title',
+			'meta_description' => 'description',
 		);
 
-		if ( isset( $field_map[ $field ] ) ) {
-			foreach ( $field_map[ $field ] as $meta_key ) {
+		if ( isset( $bridge_field_map[ $field ] ) ) {
+			$keys = $this->bridge->get_all_backup_keys( $bridge_field_map[ $field ] );
+			foreach ( $keys as $meta_key ) {
 				update_post_meta( $post_id, $meta_key, $before );
 			}
 
-			// Log the rollback action.
 			$this->activity_log->log(
 				$post_id,
 				SEO_Agent_AI_Activity_Log::TRIGGER_ROLLBACK,
 				$field,
 				(string) $entry['value_after'],
 				$before,
-				sprintf( 'Rolled back log entry #%d.', $log_id ),
+				/* translators: %d: activity log entry id. */
+				sprintf( __( 'Rolled back log entry #%d.', 'seo-agent-ai' ), $log_id ),
 				array(),
 				1.0,
 				SEO_Agent_AI_Activity_Log::TRIGGER_ROLLBACK
 			);
 
-			// Mark the original entry as rolled back.
 			$this->activity_log->update_status( $log_id, SEO_Agent_AI_Activity_Log::STATUS_ROLLED_BACK );
 		}
 
@@ -414,6 +580,7 @@ class SEO_Agent_AI_Plugin {
 		$client_secret  = isset( $_POST['google_client_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['google_client_secret'] ) ) : '';
 		$gsc_site_url   = isset( $_POST['gsc_site_url'] ) ? sanitize_text_field( wp_unslash( $_POST['gsc_site_url'] ) ) : '';
 		$ga4_property   = isset( $_POST['ga4_property_id'] ) ? preg_replace( '/[^0-9]/', '', (string) wp_unslash( $_POST['ga4_property_id'] ) ) : '';
+		$gemini_key     = isset( $_POST['gemini_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['gemini_api_key'] ) ) : '';
 		$autopilot      = ! empty( $_POST['autopilot_enabled'] );
 		$max_daily      = isset( $_POST['autopilot_max_daily'] ) ? max( 1, min( 50, absint( $_POST['autopilot_max_daily'] ) ) ) : 5;
 		$min_conf       = isset( $_POST['autopilot_min_confidence'] ) ? round( min( 1.0, max( 0.1, (float) wp_unslash( $_POST['autopilot_min_confidence'] ) ) ), 2 ) : 0.7;
@@ -424,7 +591,10 @@ class SEO_Agent_AI_Plugin {
 			update_option( SEO_Agent_AI_Google_OAuth::OPTION_CLIENT_ID, $client_id, false );
 		}
 		if ( $client_secret !== '' ) {
-			update_option( SEO_Agent_AI_Google_OAuth::OPTION_CLIENT_SECRET, $client_secret, false );
+			update_option( SEO_Agent_AI_Google_OAuth::OPTION_CLIENT_SECRET, SEO_Agent_AI_Crypto::encrypt( $client_secret ), false );
+		}
+		if ( $gemini_key !== '' ) {
+			update_option( SEO_Agent_AI_Gemini_Client::OPTION_API_KEY, SEO_Agent_AI_Crypto::encrypt( $gemini_key ), false );
 		}
 
 		update_option( SEO_Agent_AI_GSC_Client::OPTION_GSC_SITE_URL, $gsc_site_url, false );
@@ -593,5 +763,57 @@ class SEO_Agent_AI_Plugin {
 
 	private function release_lock() {
 		delete_transient( self::ANALYSIS_LOCK_KEY );
+	}
+
+	// -------------------------------------------------------------------
+	// API failure tracking & persistent admin notice
+	// -------------------------------------------------------------------
+
+	private function update_api_failure_tracker( $processed, $failed ) {
+		// Only count a "run failure" when every analyzed post saw an API
+		// error — that is the signature of an expired/revoked credential
+		// or a misconfigured property, not a transient blip.
+		$all_failed = $processed > 0 && $failed === $processed;
+		$current    = (int) get_option( self::OPTION_API_FAILURES, 0 );
+
+		if ( $all_failed ) {
+			update_option( self::OPTION_API_FAILURES, $current + 1, false );
+		} else {
+			if ( $current > 0 ) {
+				update_option( self::OPTION_API_FAILURES, 0, false );
+			}
+			delete_option( self::OPTION_LAST_API_ERROR );
+		}
+	}
+
+	public function maybe_render_api_failure_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$count = (int) get_option( self::OPTION_API_FAILURES, 0 );
+		if ( $count < self::API_FAILURE_NOTICE_AFTER ) {
+			return;
+		}
+
+		$msg = (string) get_option( self::OPTION_LAST_API_ERROR, '' );
+
+		echo '<div class="notice notice-error"><p>';
+		echo '<strong>' . esc_html__( 'SEO Agent AI:', 'seo-agent-ai' ) . '</strong> ';
+		printf(
+			/* translators: %d: number of consecutive failed analysis runs. */
+			esc_html__( 'Search Console / Analytics calls failed on the last %d analysis runs.', 'seo-agent-ai' ),
+			(int) $count
+		);
+		echo ' ';
+		printf(
+			/* translators: 1: opening anchor for Connect page, 2: closing anchor. */
+			esc_html__( 'Reconnect your Google account on the %1$sConnect page%2$s, or check Settings for property selection.', 'seo-agent-ai' ),
+			'<a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-connect' ) ) . '">',
+			'</a>'
+		);
+		if ( $msg !== '' ) {
+			echo '<br><em>' . esc_html__( 'Last error:', 'seo-agent-ai' ) . '</em> ' . esc_html( $msg );
+		}
+		echo '</p></div>';
 	}
 }

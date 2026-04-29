@@ -401,3 +401,33 @@
     font-size: 12px;
     color: #3c434a;
 }
+
+/* -----------------------------------------------------------------------
+   Interactive analysis progress bar
+   ----------------------------------------------------------------------- */
+.seo-agent-progress-track {
+    height: 8px;
+    background: #dcdcde;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.seo-agent-progress-fill {
+    height: 100%;
+    background: #2271b1;
+    border-radius: 4px;
+    width: 0;
+    transition: width 0.35s ease;
+}
+
+.seo-agent-progress-fill.complete {
+    background: #1e8e3e;
+}
+
+.seo-agent-progress-status {
+    font-size: 13px;
+    color: #50575e;
+    margin: 0;
+    line-height: 1.5;
+}

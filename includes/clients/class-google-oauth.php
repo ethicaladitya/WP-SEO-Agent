@@ -298,54 +298,12 @@ class SEO_Agent_AI_Google_OAuth {
 		return $raw !== '' ? $this->decrypt( $raw ) : '';
 	}
 
-	/**
-	 * Encrypt a token value for storage.
-	 *
-	 * Uses AES-256-CBC when OpenSSL is available; otherwise returns the value
-	 * base64-encoded (obfuscated but not cryptographically protected).
-	 */
 	private function encrypt( $value ) {
-		if ( $value === '' ) {
-			return '';
-		}
-
-		if ( function_exists( 'openssl_encrypt' ) ) {
-			$key = substr( hash( 'sha256', wp_salt( 'secure_auth' ), true ), 0, 32 );
-			$iv  = openssl_random_pseudo_bytes( 16 );
-			$enc = openssl_encrypt( $value, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
-			if ( $enc !== false ) {
-				return base64_encode( $iv . $enc ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
-			}
-		}
-
-		return base64_encode( $value ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+		return SEO_Agent_AI_Crypto::encrypt( $value );
 	}
 
-	/**
-	 * Decrypt a token value from storage.
-	 */
 	private function decrypt( $value ) {
-		if ( $value === '' ) {
-			return '';
-		}
-
-		$raw = base64_decode( $value, true ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
-		if ( $raw === false ) {
-			return $value; // Not base64 – return as-is (legacy plain-text token).
-		}
-
-		if ( function_exists( 'openssl_decrypt' ) && strlen( $raw ) > 16 ) {
-			$key = substr( hash( 'sha256', wp_salt( 'secure_auth' ), true ), 0, 32 );
-			$iv  = substr( $raw, 0, 16 );
-			$enc = substr( $raw, 16 );
-			$dec = openssl_decrypt( $enc, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
-			if ( $dec !== false ) {
-				return $dec;
-			}
-		}
-
-		// No OpenSSL or decryption failed – treat as plain base64.
-		return $raw;
+		return SEO_Agent_AI_Crypto::decrypt( $value );
 	}
 
 	private function get_client_id() {
@@ -365,6 +323,7 @@ class SEO_Agent_AI_Google_OAuth {
 				return trim( $v );
 			}
 		}
-		return (string) get_option( self::OPTION_CLIENT_SECRET, '' );
+		$stored = (string) get_option( self::OPTION_CLIENT_SECRET, '' );
+		return $stored !== '' ? SEO_Agent_AI_Crypto::decrypt( $stored ) : '';
 	}
 }

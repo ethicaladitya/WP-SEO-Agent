@@ -1,21 +1,32 @@
 <?php
 /**
- * Plugin Name: SEO Agent AI
- * Description: Autonomous SEO agent — continuously analyzes Search Console and GA4 signals, then applies smart metadata optimizations with full audit trail and autopilot mode.
- * Version: 2.0.0
- * Author: SEO Agent AI
- * License: GPL-2.0-or-later
- * Text Domain: seo-agent-ai
+ * Plugin Name:       SEO Agent AI
+ * Plugin URI:        https://adityashah.blog/seo-agent-ai/
+ * Description:       Autonomous SEO agent — continuously analyzes Search Console and GA4 signals, then proposes prioritized SEO recommendations with full audit trail and optional autopilot.
+ * Version:           2.1.0
+ * Requires at least: 6.4
+ * Requires PHP:      7.4
+ * Author:            SEO Agent AI
+ * Author URI:        https://adityashah.blog/
+ * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       seo-agent-ai
+ * Domain Path:       /languages
+ *
+ * @package SEO_Agent_AI
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SEO_AGENT_AI_VERSION',    '2.0.0' );
+define( 'SEO_AGENT_AI_VERSION',     '2.1.0' );
 define( 'SEO_AGENT_AI_PLUGIN_FILE', __FILE__ );
 define( 'SEO_AGENT_AI_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
 define( 'SEO_AGENT_AI_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
+
+// Shared helpers.
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-crypto.php';
 
 // Core data layer.
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-data-store.php';
@@ -26,8 +37,12 @@ require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-google-oauth.php'
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-gsc-client.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-ga4-client.php';
 
+// SEO plugin integration bridge.
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-seo-plugin-bridge.php';
+
 // SEO intelligence.
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-seo-analyzer.php';
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-gemini-client.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-recommendation-engine.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-fix-executor.php';
 
@@ -41,5 +56,7 @@ require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-plugin.php';
 
 register_activation_hook( __FILE__, array( 'SEO_Agent_AI_Plugin', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'SEO_Agent_AI_Plugin', 'deactivate' ) );
+
+add_action( 'plugins_loaded', array( 'SEO_Agent_AI_Plugin', 'maybe_upgrade' ) );
 
 SEO_Agent_AI_Plugin::instance();

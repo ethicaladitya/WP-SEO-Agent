@@ -30,16 +30,21 @@ class SEO_Agent_AI_Admin_Page {
 	/** @var SEO_Agent_AI_Google_OAuth */
 	private $oauth;
 
+	/** @var SEO_Agent_AI_SEO_Plugin_Bridge */
+	private $bridge;
+
 	public function __construct(
 		SEO_Agent_AI_Data_Store $data_store,
 		SEO_Agent_AI_Connect_Page $connect_page,
 		SEO_Agent_AI_Report_Page $report_page,
-		SEO_Agent_AI_Google_OAuth $oauth
+		SEO_Agent_AI_Google_OAuth $oauth,
+		SEO_Agent_AI_SEO_Plugin_Bridge $bridge
 	) {
 		$this->data_store   = $data_store;
 		$this->connect_page = $connect_page;
 		$this->report_page  = $report_page;
 		$this->oauth        = $oauth;
+		$this->bridge       = $bridge;
 	}
 
 	// -------------------------------------------------------------------
@@ -172,11 +177,98 @@ class SEO_Agent_AI_Admin_Page {
 				</div>
 			<?php endif; ?>
 
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-bottom:20px;">
-				<?php wp_nonce_field( 'seo_agent_ai_run_analysis' ); ?>
-				<input type="hidden" name="action" value="seo_agent_ai_run_analysis" />
-				<button type="submit" class="button button-primary"><?php esc_html_e( 'Run Analysis Now', 'seo-agent-ai' ); ?></button>
-			</form>
+			<div id="seo-analysis-wrap" style="margin-bottom:24px;">
+				<button id="seo-run-analysis" class="button button-primary" style="font-size:14px;height:38px;padding:0 20px;">
+					<?php esc_html_e( 'Run Analysis Now', 'seo-agent-ai' ); ?>
+				</button>
+				<div id="seo-analysis-progress" style="display:none;max-width:540px;margin-top:16px;">
+					<div class="seo-agent-progress-track">
+						<div id="seo-progress-fill" class="seo-agent-progress-fill" style="width:0%"></div>
+					</div>
+					<p id="seo-progress-status" class="seo-agent-progress-status">
+						<?php esc_html_e( 'Initializing&hellip;', 'seo-agent-ai' ); ?>
+					</p>
+				</div>
+			</div>
+
+			<script>
+			(function($) {
+				'use strict';
+				var batchNonce = '<?php echo esc_js( wp_create_nonce( 'seo_agent_ai_analyze_batch' ) ); ?>';
+				var strings = {
+					analyzing: '<?php echo esc_js( __( 'Analyzing\u2026', 'seo-agent-ai' ) ); ?>',
+					of:        '<?php echo esc_js( __( 'of', 'seo-agent-ai' ) ); ?>',
+					done:      '<?php echo esc_js( __( 'Analysis complete', 'seo-agent-ai' ) ); ?>',
+					posts:     '<?php echo esc_js( __( 'posts analyzed', 'seo-agent-ai' ) ); ?>',
+					recs:      '<?php echo esc_js( __( 'with recommendations', 'seo-agent-ai' ) ); ?>',
+					errors:    '<?php echo esc_js( __( 'API errors', 'seo-agent-ai' ) ); ?>',
+					loading:   '<?php echo esc_js( __( 'Loading results\u2026', 'seo-agent-ai' ) ); ?>',
+					retry:     '<?php echo esc_js( __( 'Run Analysis Now', 'seo-agent-ai' ) ); ?>',
+					connErr:   '<?php echo esc_js( __( 'Connection error \u2014 please try again.', 'seo-agent-ai' ) ); ?>'
+				};
+
+				$('#seo-run-analysis').on('click', function() {
+					$(this).prop('disabled', true).html(
+						'<span class="spinner is-active" style="float:none;margin:-3px 6px 0 0;vertical-align:middle;width:16px;height:16px;"></span>' + strings.analyzing
+					);
+					$('#seo-analysis-progress').slideDown(200);
+					runBatch(0);
+				});
+
+				function runBatch(offset) {
+					$.post(ajaxurl, {
+						action:      'seo_agent_ai_analyze_batch',
+						offset:      offset,
+						_ajax_nonce: batchNonce
+					})
+					.done(function(r) {
+						if (!r.success) {
+							setStatus((r.data ? r.data : 'Error'), 'error');
+							resetButton();
+							return;
+						}
+						var d = r.data;
+						$('#seo-progress-fill').css('width', d.percent + '%');
+
+						if (d.done) {
+							$('#seo-progress-fill').css('width', '100%').addClass('complete');
+							var msg = '\u2713 ' + strings.done + ' \u2014 ' + d.total + ' ' + strings.posts;
+							if (d.with_recs > 0) {
+								msg += ', ' + d.with_recs + ' ' + strings.recs;
+							}
+							if (d.failed > 0) {
+								msg += ' (' + d.failed + ' ' + strings.errors + ')';
+							}
+							setStatus(msg, 'success');
+							setTimeout(function() {
+								setStatus(strings.loading, 'info');
+								location.reload();
+							}, 1400);
+						} else {
+							var status = d.processed + ' ' + strings.of + ' ' + d.total;
+							if (d.current_title) {
+								status += ' \u2014 ' + d.current_title;
+							}
+							setStatus(status, 'info');
+							runBatch(d.processed);
+						}
+					})
+					.fail(function() {
+						setStatus(strings.connErr, 'error');
+						resetButton();
+					});
+				}
+
+				function setStatus(msg, type) {
+					var colors = { success: '#1e8e3e', error: '#c5221f', info: '#50575e' };
+					$('#seo-progress-status').text(msg).css('color', colors[type] || colors.info);
+				}
+
+				function resetButton() {
+					$('#seo-run-analysis').prop('disabled', false).text(strings.retry);
+				}
+			})(jQuery);
+			</script>
 
 			<?php if ( empty( $post_ids ) ) : ?>
 				<p><em><?php esc_html_e( 'No recommendations yet. Run an analysis to populate insights.', 'seo-agent-ai' ); ?></em></p>
@@ -348,6 +440,7 @@ class SEO_Agent_AI_Admin_Page {
 		$client_secret   = (string) get_option( SEO_Agent_AI_Google_OAuth::OPTION_CLIENT_SECRET, '' );
 		$gsc_site_url    = (string) get_option( SEO_Agent_AI_GSC_Client::OPTION_GSC_SITE_URL, home_url( '/' ) );
 		$ga4_property_id = (string) get_option( SEO_Agent_AI_GA4_Client::OPTION_GA4_PROPERTY_ID, '' );
+		$gemini_key      = (string) get_option( SEO_Agent_AI_Gemini_Client::OPTION_API_KEY, '' );
 		$autopilot       = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
 		$max_daily       = (int) get_option( 'seo_agent_ai_autopilot_max_daily', 5 );
 		$min_confidence  = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
@@ -418,6 +511,49 @@ class SEO_Agent_AI_Admin_Page {
 									<input type="text" id="ga4_property_id" name="ga4_property_id" value="<?php echo esc_attr( $ga4_property_id ); ?>" class="regular-text" />
 									<p class="description"><?php esc_html_e( 'Numeric GA4 property ID. Universal Analytics (UA-*) is retired by Google.', 'seo-agent-ai' ); ?></p>
 								</div>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<div class="seo-agent-card seo-agent-settings-section">
+					<h2><?php esc_html_e( 'SEO Plugin Integration', 'seo-agent-ai' ); ?></h2>
+					<?php
+					$detected_plugins = $this->bridge->get_detected_plugins();
+					if ( ! empty( $detected_plugins ) ) :
+						?>
+					<p class="description" style="margin-bottom:12px;">
+						<?php esc_html_e( 'SEO Agent AI is automatically syncing changes with the following active plugins. When you apply a recommendation, meta titles and descriptions will be written to all of them simultaneously.', 'seo-agent-ai' ); ?>
+					</p>
+					<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+						<?php foreach ( $detected_plugins as $slug ) : ?>
+							<span class="seo-agent-pill safe" style="font-size:13px;"><?php echo esc_html( $this->bridge->get_plugin_label( $slug ) ); ?></span>
+						<?php endforeach; ?>
+					</div>
+					<?php else : ?>
+					<div class="notice notice-info inline" style="margin:0;">
+						<p><?php esc_html_e( 'No supported SEO plugin detected. Install Yoast SEO, RankMath SEO, or SmartCrawl to automatically sync generated metadata.', 'seo-agent-ai' ); ?></p>
+					</div>
+					<?php endif; ?>
+				</div>
+
+				<div class="seo-agent-card seo-agent-settings-section">
+					<h2><?php esc_html_e( 'AI Enhancement (Gemini)', 'seo-agent-ai' ); ?></h2>
+					<p class="description" style="margin-bottom:14px;">
+						<?php
+						printf(
+							/* translators: %s: link to Google AI Studio */
+							esc_html__( 'Optional. Provide a Gemini API key to generate smarter, context-aware meta titles, descriptions and focus keywords. Without a key the agent uses rule-based generation. %s', 'seo-agent-ai' ),
+							'<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Get a free API key at Google AI Studio', 'seo-agent-ai' ) . '</a>'
+						);
+						?>
+					</p>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="gemini_api_key"><?php esc_html_e( 'Gemini API Key', 'seo-agent-ai' ); ?></label></th>
+							<td>
+								<input type="password" id="gemini_api_key" name="gemini_api_key" value="<?php echo esc_attr( $gemini_key ); ?>" class="regular-text" autocomplete="off" />
+								<p class="description"><?php esc_html_e( 'Stored encrypted at rest (AES-256-CBC) in WordPress options. Leave blank to keep the existing key — the field is intentionally empty even when a key is saved. Define SEO_AGENT_AI_GEMINI_API_KEY in wp-config.php to override the saved value.', 'seo-agent-ai' ); ?></p>
 							</td>
 						</tr>
 					</table>
@@ -593,10 +729,12 @@ class SEO_Agent_AI_Admin_Page {
 
 	private function format_signals( array $signals ) {
 		$labels = array(
-			'content_refresh_needed'  => 'Content refresh needed',
-			'title_meta_optimization' => 'Title/meta optimization',
-			'intent_mismatch'         => 'Intent mismatch',
-			'declining_performance'   => 'Declining performance',
+			'content_refresh_needed'  => __( 'Content refresh needed', 'seo-agent-ai' ),
+			'title_meta_optimization' => __( 'Title/meta optimization', 'seo-agent-ai' ),
+			'intent_mismatch'         => __( 'Intent mismatch', 'seo-agent-ai' ),
+			'declining_performance'   => __( 'Declining performance', 'seo-agent-ai' ),
+			'thin_content'            => __( 'Thin content', 'seo-agent-ai' ),
+			'missing_meta_basics'     => __( 'Missing meta basics', 'seo-agent-ai' ),
 		);
 
 		$active = array();
@@ -614,6 +752,7 @@ class SEO_Agent_AI_Admin_Page {
 	private function render_notice( $notice ) {
 		$map = array(
 			'analysis_complete'        => array( 'success', __( 'Analysis completed.', 'seo-agent-ai' ) ),
+			'analysis_scheduled'       => array( 'info',    __( 'Analysis scheduled. WP-Cron will run it shortly; reload this page in a minute or two for results.', 'seo-agent-ai' ) ),
 			'fix_applied'              => array( 'success', __( 'Safe metadata fix applied.', 'seo-agent-ai' ) ),
 			'apply_failed'             => array( 'error',   __( 'Could not apply fix. Check recommendation risk and payload.', 'seo-agent-ai' ) ),
 			'invalid_input'            => array( 'error',   __( 'Invalid input provided.', 'seo-agent-ai' ) ),
@@ -622,6 +761,8 @@ class SEO_Agent_AI_Admin_Page {
 			'connection_tested'        => array( 'info',    __( 'Connection test completed. See results below.', 'seo-agent-ai' ) ),
 			'rollback_done'            => array( 'success', __( 'Rollback applied. Previous metadata restored.', 'seo-agent-ai' ) ),
 			'rollback_failed'          => array( 'error',   __( 'Rollback failed. No backup found for this post.', 'seo-agent-ai' ) ),
+			'google_disconnected'      => array( 'success', __( 'Google account disconnected.', 'seo-agent-ai' ) ),
+			'google_connected'         => array( 'success', __( 'Google account connected.', 'seo-agent-ai' ) ),
 		);
 
 		if ( ! isset( $map[ $notice ] ) ) {
