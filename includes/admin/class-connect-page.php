@@ -208,7 +208,7 @@ class SEO_Agent_AI_Connect_Page {
 
 		if ( ! $this->oauth->is_connected() ) {
 			$out = array( 'ok' => false, 'message' => __( 'No refresh token stored. Sign in with Google.', 'seo-agent-ai' ) );
-			set_transient( $cache_key, $out, MINUTE_IN_SECONDS );
+			set_transient( $cache_key, $out, 30 );
 			return $out;
 		}
 
@@ -218,7 +218,7 @@ class SEO_Agent_AI_Connect_Page {
 		} else {
 			$out = array( 'ok' => true, 'message' => '' );
 		}
-		set_transient( $cache_key, $out, MINUTE_IN_SECONDS );
+		set_transient( $cache_key, $out, 30 );
 		return $out;
 	}
 }

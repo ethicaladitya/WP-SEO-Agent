@@ -151,8 +151,19 @@ class SEO_Agent_AI_Google_OAuth {
 
 		$this->store_tokens( $data );
 		$this->fetch_and_store_user_email( $data['access_token'] );
+		$this->reset_auth_health_signals();
 
 		return true;
+	}
+
+	/**
+	 * Invalidate stale "auth failing" UI signals after a successful flow so the
+	 * banner and the API-failure notice flip back to green immediately.
+	 */
+	private function reset_auth_health_signals() {
+		delete_transient( 'seo_agent_ai_auth_health' );
+		delete_option( 'seo_agent_ai_consecutive_api_failures' );
+		delete_option( 'seo_agent_ai_last_api_error' );
 	}
 
 	/**

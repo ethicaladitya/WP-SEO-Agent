@@ -621,6 +621,15 @@ class SEO_Agent_AI_Plugin {
 		$gsc_result       = $this->gsc_client->test_connection();
 		$analytics_result = $this->ga4_client->test_connection();
 
+		// If both APIs are healthy, clear the "consecutive failures" signals
+		// so the persistent notice and auth-health banner flip back to green
+		// without waiting for the next daily analysis run.
+		if ( ! is_wp_error( $gsc_result ) && ! is_wp_error( $analytics_result ) ) {
+			delete_option( self::OPTION_API_FAILURES );
+			delete_option( self::OPTION_LAST_API_ERROR );
+			delete_transient( 'seo_agent_ai_auth_health' );
+		}
+
 		set_transient(
 			self::CONNECTION_TEST_TRANSIENT,
 			array(
