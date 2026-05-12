@@ -33,18 +33,48 @@ class SEO_Agent_AI_Admin_Page {
 	/** @var SEO_Agent_AI_SEO_Plugin_Bridge */
 	private $bridge;
 
+	/** @var SEO_Agent_AI_Dashboard_Page */
+	private $dashboard_page;
+
+	/** @var SEO_Agent_AI_Opportunities_Page */
+	private $opportunities_page;
+
+	/** @var SEO_Agent_AI_Rankings_Page */
+	private $rankings_page;
+
+	/** @var SEO_Agent_AI_Pending_Approvals_Page */
+	private $pending_approvals_page;
+
+	/** @var SEO_Agent_AI_Rollback_Center_Page */
+	private $rollback_center_page;
+
+	/** @var SEO_Agent_AI_Cron_Status_Page */
+	private $cron_status_page;
+
 	public function __construct(
 		SEO_Agent_AI_Data_Store $data_store,
 		SEO_Agent_AI_Connect_Page $connect_page,
 		SEO_Agent_AI_Report_Page $report_page,
 		SEO_Agent_AI_Google_OAuth $oauth,
-		SEO_Agent_AI_SEO_Plugin_Bridge $bridge
+		SEO_Agent_AI_SEO_Plugin_Bridge $bridge,
+		SEO_Agent_AI_Dashboard_Page $dashboard_page,
+		SEO_Agent_AI_Opportunities_Page $opportunities_page,
+		SEO_Agent_AI_Rankings_Page $rankings_page,
+		SEO_Agent_AI_Pending_Approvals_Page $pending_approvals_page,
+		SEO_Agent_AI_Rollback_Center_Page $rollback_center_page,
+		SEO_Agent_AI_Cron_Status_Page $cron_status_page
 	) {
-		$this->data_store   = $data_store;
-		$this->connect_page = $connect_page;
-		$this->report_page  = $report_page;
-		$this->oauth        = $oauth;
-		$this->bridge       = $bridge;
+		$this->data_store             = $data_store;
+		$this->connect_page           = $connect_page;
+		$this->report_page            = $report_page;
+		$this->oauth                  = $oauth;
+		$this->bridge                 = $bridge;
+		$this->dashboard_page         = $dashboard_page;
+		$this->opportunities_page     = $opportunities_page;
+		$this->rankings_page          = $rankings_page;
+		$this->pending_approvals_page = $pending_approvals_page;
+		$this->rollback_center_page   = $rollback_center_page;
+		$this->cron_status_page       = $cron_status_page;
 	}
 
 	// -------------------------------------------------------------------
@@ -52,23 +82,25 @@ class SEO_Agent_AI_Admin_Page {
 	// -------------------------------------------------------------------
 
 	public function register_menu() {
+		// Top-level menu item goes to the new Dashboard.
 		add_menu_page(
 			__( 'SEO Agent AI', 'seo-agent-ai' ),
 			__( 'SEO Agent AI', 'seo-agent-ai' ),
 			'manage_options',
 			'seo-agent-ai',
-			array( $this, 'render_overview_page' ),
+			array( $this->dashboard_page, 'render' ),
 			'dashicons-chart-area',
 			58
 		);
 
+		// First submenu must match the top-level slug to rename it.
 		add_submenu_page(
 			'seo-agent-ai',
-			__( 'Overview', 'seo-agent-ai' ),
-			__( 'Overview', 'seo-agent-ai' ),
+			__( 'Dashboard', 'seo-agent-ai' ),
+			__( 'Dashboard', 'seo-agent-ai' ),
 			'manage_options',
 			'seo-agent-ai',
-			array( $this, 'render_overview_page' )
+			array( $this->dashboard_page, 'render' )
 		);
 
 		add_submenu_page(
@@ -82,11 +114,56 @@ class SEO_Agent_AI_Admin_Page {
 
 		add_submenu_page(
 			'seo-agent-ai',
-			__( 'Activity Report', 'seo-agent-ai' ),
-			__( 'Activity Report', 'seo-agent-ai' ),
+			__( 'Analysis', 'seo-agent-ai' ),
+			__( 'Analysis', 'seo-agent-ai' ),
 			'manage_options',
 			'seo-agent-ai-report',
 			array( $this->report_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Opportunities', 'seo-agent-ai' ),
+			__( 'Opportunities', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-opportunities',
+			array( $this->opportunities_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Keyword Rankings', 'seo-agent-ai' ),
+			__( 'Rankings', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-rankings',
+			array( $this->rankings_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Pending Approvals', 'seo-agent-ai' ),
+			__( 'Approvals', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-approvals',
+			array( $this->pending_approvals_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Rollback Center', 'seo-agent-ai' ),
+			__( 'Rollback', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-rollback',
+			array( $this->rollback_center_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Cron Status', 'seo-agent-ai' ),
+			__( 'Cron Status', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-cron',
+			array( $this->cron_status_page, 'render' )
 		);
 
 		add_submenu_page(
@@ -567,6 +644,61 @@ class SEO_Agent_AI_Admin_Page {
 					</table>
 				</div>
 
+				<?php
+				$ai_provider   = (string) get_option( 'seo_agent_ai_ai_provider', 'gemini' );
+				$openai_base   = (string) get_option( SEO_Agent_AI_OpenAI_Client::OPTION_BASE_URL, '' );
+				$openai_model  = (string) get_option( SEO_Agent_AI_OpenAI_Client::OPTION_MODEL, '' );
+				$email_reports = (bool) get_option( 'seo_agent_ai_email_reports', false );
+				?>
+				<div class="seo-agent-card seo-agent-settings-section">
+					<h2><?php esc_html_e( 'AI Provider', 'seo-agent-ai' ); ?></h2>
+					<p class="description" style="margin-bottom:14px;">
+						<?php esc_html_e( 'Choose which AI backend to use for generating meta titles, descriptions, and keyword suggestions. Both providers use the same interface — you can switch at any time.', 'seo-agent-ai' ); ?>
+					</p>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Provider', 'seo-agent-ai' ); ?></th>
+							<td>
+								<fieldset>
+									<label style="display:block;margin-bottom:8px;">
+										<input type="radio" name="ai_provider" value="gemini" <?php checked( $ai_provider, 'gemini' ); ?> />
+										<?php esc_html_e( 'Gemini (Google AI)', 'seo-agent-ai' ); ?>
+									</label>
+									<label style="display:block;margin-bottom:8px;">
+										<input type="radio" name="ai_provider" value="openai" <?php checked( $ai_provider, 'openai' ); ?> />
+										<?php esc_html_e( 'OpenAI-compatible (default or custom endpoint)', 'seo-agent-ai' ); ?>
+									</label>
+									<label style="display:block;">
+										<input type="radio" name="ai_provider" value="auto" <?php checked( $ai_provider, 'auto' ); ?> />
+										<?php esc_html_e( 'Auto (try Gemini first, fall back to OpenAI, then rule-based)', 'seo-agent-ai' ); ?>
+									</label>
+								</fieldset>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="openai_api_key"><?php esc_html_e( 'API Key', 'seo-agent-ai' ); ?></label></th>
+							<td>
+								<input type="password" id="openai_api_key" name="openai_api_key" value="" class="regular-text" autocomplete="off" placeholder="<?php esc_attr_e( 'Leave blank to keep existing key', 'seo-agent-ai' ); ?>" />
+								<p class="description"><?php esc_html_e( 'Stored encrypted. Leave blank to keep the saved value. Define SEO_AGENT_AI_OPENAI_API_KEY in wp-config.php to override.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="openai_base_url"><?php esc_html_e( 'Base URL', 'seo-agent-ai' ); ?></label></th>
+							<td>
+								<input type="url" id="openai_base_url" name="openai_base_url" value="<?php echo esc_attr( $openai_base ); ?>" class="regular-text" placeholder="https://api.openai.com/v1" />
+								<p class="description"><?php esc_html_e( 'Leave blank for default. Change to use a custom endpoint.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="openai_model"><?php esc_html_e( 'Model', 'seo-agent-ai' ); ?></label></th>
+							<td>
+								<input type="text" id="openai_model" name="openai_model" value="<?php echo esc_attr( $openai_model ); ?>" class="regular-text" placeholder="gpt-4o-mini" />
+								<p class="description"><?php esc_html_e( 'Leave blank for default (gpt-4o-mini). Change to match the model available at your endpoint.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
 				<div class="seo-agent-card seo-agent-settings-section">
 					<h2><?php esc_html_e( 'Autopilot Mode', 'seo-agent-ai' ); ?></h2>
 					<p class="description" style="margin-bottom:14px;">
@@ -607,6 +739,15 @@ class SEO_Agent_AI_Admin_Page {
 							<td>
 								<input type="number" id="log_retention_days" name="log_retention_days" value="<?php echo esc_attr( (string) $log_retention ); ?>" min="7" max="730" style="width:80px;" />
 								<p class="description"><?php esc_html_e( 'Log entries older than this many days are deleted automatically.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Email Daily Reports', 'seo-agent-ai' ); ?></th>
+							<td>
+								<label>
+									<input type="checkbox" name="email_reports" value="1" <?php checked( isset( $email_reports ) ? $email_reports : false ); ?> />
+									<?php esc_html_e( 'Send the daily SEO summary report to the admin email address', 'seo-agent-ai' ); ?>
+								</label>
 							</td>
 						</tr>
 					</table>
@@ -737,12 +878,24 @@ class SEO_Agent_AI_Admin_Page {
 
 	private function format_signals( array $signals ) {
 		$labels = array(
+			// Original signals.
 			'content_refresh_needed'  => __( 'Content refresh needed', 'seo-agent-ai' ),
 			'title_meta_optimization' => __( 'Title/meta optimization', 'seo-agent-ai' ),
 			'intent_mismatch'         => __( 'Intent mismatch', 'seo-agent-ai' ),
 			'declining_performance'   => __( 'Declining performance', 'seo-agent-ai' ),
 			'thin_content'            => __( 'Thin content', 'seo-agent-ai' ),
 			'missing_meta_basics'     => __( 'Missing meta basics', 'seo-agent-ai' ),
+			// New v3.0 signals.
+			'page_two_opportunity'    => __( 'Page-2 opportunity', 'seo-agent-ai' ),
+			'ctr_anomaly'             => __( 'CTR below expected', 'seo-agent-ai' ),
+			'cannibalization_risk'    => __( 'Keyword cannibalization', 'seo-agent-ai' ),
+			'content_decay'           => __( 'Content decay', 'seo-agent-ai' ),
+			'orphan_page'             => __( 'Orphan page', 'seo-agent-ai' ),
+			'missing_schema'          => __( 'Missing schema', 'seo-agent-ai' ),
+			'weak_engagement'         => __( 'Weak engagement', 'seo-agent-ai' ),
+			'title_ctr_mismatch'      => __( 'Title/CTR mismatch', 'seo-agent-ai' ),
+			'missing_faq'             => __( 'FAQ opportunity', 'seo-agent-ai' ),
+			'index_anomaly'           => __( 'Index anomaly', 'seo-agent-ai' ),
 		);
 
 		$active = array();

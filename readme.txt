@@ -4,7 +4,7 @@ Tags: seo, analytics, search-console, ga4, recommendations
 Requires at least: 6.4
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.1.1
+Stable tag: 3.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -63,6 +63,30 @@ Open SEO Agent AI → Activity Report, find the entry, click Rollback. The previ
 
 Yes. Uninstalling removes the activity log table, every plugin option, every plugin post-meta key, all transients, and unschedules the cron event.
 
+== External Services ==
+
+This plugin connects to third-party services **only after you provide credentials and authorize the connection**. No external call is made on plugin activation.
+
+**Google APIs (mandatory for core functionality)**
+When you complete the Google OAuth flow, the plugin communicates with:
+- `accounts.google.com` — OAuth 2.0 authorization and token exchange
+- `oauth2.googleapis.com` — Access-token refresh
+- `searchconsole.googleapis.com` — Fetching Search Console query data, impressions, clicks, and ranking positions for your verified property
+- `analyticsdata.googleapis.com` — Fetching GA4 sessions, engagement rate, and time-on-page
+- `analyticsadmin.googleapis.com` — Listing available GA4 properties
+- Privacy policy: https://policies.google.com/privacy | Terms: https://policies.google.com/terms
+
+**Gemini AI (optional)**
+When you save a Gemini API key in Settings, AI-generated meta titles and descriptions are fetched from:
+- `generativelanguage.googleapis.com`
+- Privacy policy: https://ai.google.dev/gemini-api/terms
+
+**OpenAI-compatible endpoint (optional)**
+When you configure an API key and base URL for an OpenAI-compatible provider (defaults to `https://api.openai.com/v1`), AI meta suggestions are fetched from your configured endpoint. This could be the standard OpenAI endpoint or any compatible alternative you specify.
+- OpenAI privacy policy: https://openai.com/policies/privacy-policy | Terms: https://openai.com/policies/terms-of-use
+
+No data is sent to any service until you explicitly configure and connect it.
+
 == Screenshots ==
 
 1. Overview dashboard showing per-post signals and recommendations.
@@ -72,6 +96,21 @@ Yes. Uninstalling removes the activity log table, every plugin option, every plu
 5. Per-post recommendation card with proposed metadata.
 
 == Changelog ==
+
+= 3.0.0 =
+* Full autonomous SEO growth engine: multi-dimensional 0-100 SEO scoring per page, AI decision queue with confidence tiers, admin approval workflow.
+* Five new database tables: keyword_history, page_insights, ai_decisions, daily_reports, internal_links.
+* Seven specialized cron jobs: dedicated GSC fetch, GA4 fetch, daily report generation, weekly page scoring, content decay detection, internal link scan, old-data purge.
+* OpenAI-compatible AI provider: configure any OpenAI-compatible endpoint (standard OpenAI or custom base URL) alongside or instead of Gemini; auto-fallback logic.
+* New admin pages: SEO Dashboard with widgets, Opportunities ranked list, Keyword Rankings chart, Pending Approvals queue, Rollback Center with search, Cron Status table.
+* Internal link engine: detects orphan pages, inserts up to 3 contextual links per post per run, fully reversible via internal_links table.
+* Schema engine: auto-injects Article, BlogPosting, FAQPage, HowTo, and BreadcrumbList JSON-LD via wp_head.
+* WP-CLI suite: 10 subcommands (analyze, optimize, report, rollback, fetch-gsc, fetch-ga4, score, opportunities, status, logs).
+* Dry-run mode throughout the analysis and fix chain; --dry-run flag in all WP-CLI commands.
+* Deduplication of AI decisions: repeated cron runs update existing pending decisions rather than inserting duplicates.
+* SEO plugin bridge expanded: added AIOSEO and SEOPress support alongside Yoast, RankMath, SmartCrawl, The SEO Framework.
+* Verbose logger: configurable log levels (debug/info/warning/error) written to WP debug log or seo-agent-ai.log.
+* Queue manager: persistent batch processing with API rate limiting and exponential backoff on 429/503 responses.
 
 = 2.1.1 =
 * Always-visible authentication health banner on the Connect page that explains the most likely cause when token refresh fails (rotated client secret vs revoked refresh token).
@@ -99,6 +138,9 @@ Yes. Uninstalling removes the activity log table, every plugin option, every plu
 * Initial production release with analysis, recommendations, and safe metadata execution.
 
 == Upgrade Notice ==
+
+= 3.0.0 =
+Major release. Run database upgrade automatically on activation. Adds autonomous SEO scoring, AI decision queue, 5 new DB tables, OpenAI provider support, 7 cron jobs, 6 new admin pages, and WP-CLI suite.
 
 = 2.1.1 =
 Adds an always-visible authentication health banner on the Connect page so credential failures are obvious without clicking Test Connection.

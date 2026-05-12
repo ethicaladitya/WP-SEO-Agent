@@ -431,3 +431,267 @@
     margin: 0;
     line-height: 1.5;
 }
+
+/* -----------------------------------------------------------------------
+   v3.0 Dashboard — widget grid
+   ----------------------------------------------------------------------- */
+.seo-agent-widget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.seo-agent-widget {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 18px 20px;
+    text-align: center;
+    position: relative;
+}
+
+.seo-agent-widget .widget-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1d2327;
+    line-height: 1.1;
+    margin-bottom: 6px;
+}
+
+.seo-agent-widget .widget-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #646970;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+.seo-agent-widget.widget-pending { border-top: 3px solid #e1940a; }
+.seo-agent-widget.widget-ok      { border-top: 3px solid #1e8e3e; }
+.seo-agent-widget.widget-error   { border-top: 3px solid #c5221f; }
+.seo-agent-widget.widget-info    { border-top: 3px solid #2271b1; }
+
+/* -----------------------------------------------------------------------
+   v3.0 SEO Score meter ring
+   ----------------------------------------------------------------------- */
+.seo-score-ring {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.seo-score-ring svg {
+    transform: rotate(-90deg);
+}
+
+.seo-score-ring .ring-track {
+    fill: none;
+    stroke: #dcdcde;
+    stroke-width: 8;
+}
+
+.seo-score-ring .ring-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s ease;
+}
+
+.ring-fill.score-excellent { stroke: #1e8e3e; }
+.ring-fill.score-good      { stroke: #2271b1; }
+.ring-fill.score-average   { stroke: #e1940a; }
+.ring-fill.score-poor      { stroke: #c5221f; }
+.ring-fill.score-critical  { stroke: #8b0000; }
+
+.seo-score-ring .ring-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #646970;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+/* -----------------------------------------------------------------------
+   v3.0 Score distribution bar
+   ----------------------------------------------------------------------- */
+.seo-score-dist {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+    height: 60px;
+    margin-bottom: 8px;
+}
+
+.seo-score-dist-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    min-height: 4px;
+    position: relative;
+    cursor: default;
+}
+
+.seo-score-dist-bar span {
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: #646970;
+    white-space: nowrap;
+}
+
+.seo-score-dist-bar.excellent { background: #1e8e3e; }
+.seo-score-dist-bar.good      { background: #2271b1; }
+.seo-score-dist-bar.average   { background: #e1940a; }
+.seo-score-dist-bar.poor      { background: #c5221f; }
+.seo-score-dist-bar.critical  { background: #8b0000; }
+
+/* -----------------------------------------------------------------------
+   v3.0 Opportunities page cards
+   ----------------------------------------------------------------------- */
+.seo-agent-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+}
+
+.seo-agent-filters select,
+.seo-agent-filters input[type="text"],
+.seo-agent-filters input[type="search"] {
+    font-size: 13px;
+}
+
+.opportunity-type {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    padding: 2px 6px;
+    background: #f0f6fc;
+    border: 1px solid #c3d9ef;
+    border-radius: 3px;
+    color: #1967d2;
+}
+
+.proposed-preview {
+    font-size: 12px;
+    color: #3c434a;
+    font-style: italic;
+}
+
+/* -----------------------------------------------------------------------
+   v3.0 Risk badges
+   ----------------------------------------------------------------------- */
+.risk-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.risk-badge.safe     { background: #e6f4ea; color: #137333; }
+.risk-badge.medium   { background: #fef7e0; color: #b06000; }
+.risk-badge.high     { background: #fce8e6; color: #c5221f; }
+.risk-badge.critical { background: #fce8e6; color: #8b0000; border: 1px solid #fca5a5; }
+
+/* -----------------------------------------------------------------------
+   v3.0 Keyword rankings trend colors
+   ----------------------------------------------------------------------- */
+.trend-change {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+.trend-change.positive { background: #e6f4ea; color: #137333; }
+.trend-change.negative { background: #fce8e6; color: #c5221f; }
+
+/* -----------------------------------------------------------------------
+   v3.0 Cron status page
+   ----------------------------------------------------------------------- */
+.cron-status {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.cron-status.cron-ok    { background: #e6f4ea; color: #137333; }
+.cron-status.cron-error { background: #fce8e6; color: #c5221f; }
+
+/* -----------------------------------------------------------------------
+   v3.0 Dashboard: insights table score columns
+   ----------------------------------------------------------------------- */
+.score-cell {
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.score-cell.score-excellent { color: #137333; }
+.score-cell.score-good      { color: #2271b1; }
+.score-cell.score-average   { color: #b06000; }
+.score-cell.score-poor,
+.score-cell.score-critical  { color: #c5221f; }
+
+/* -----------------------------------------------------------------------
+   v3.0 Value cells in tables — truncate long text
+   ----------------------------------------------------------------------- */
+.value-cell {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #3c434a;
+}
+
+/* -----------------------------------------------------------------------
+   v3.0 Shared: wider page tables
+   ----------------------------------------------------------------------- */
+.seo-agent-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.seo-agent-table th {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: #50575e;
+    background: #f6f7f7;
+    padding: 8px 12px;
+}
+
+.seo-agent-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+/* -----------------------------------------------------------------------
+   v3.0 Rollback center
+   ----------------------------------------------------------------------- */
+.seo-agent-ai-rollback .description,
+.seo-agent-ai-cron .description {
+    font-size: 13px;
+    color: #50575e;
+    margin-bottom: 16px;
+}
+

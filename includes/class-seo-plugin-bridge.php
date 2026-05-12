@@ -8,6 +8,8 @@
  *   - RankMath SEO
  *   - SmartCrawl (WPMU DEV)
  *   - The SEO Framework
+ *   - All in One SEO (AIOSEO)
+ *   - SEOPress
  *
  * @package SEO_Agent_AI
  */
@@ -42,6 +44,16 @@ class SEO_Agent_AI_SEO_Plugin_Bridge {
 			'title'         => '_genesis_title',
 			'description'   => '_genesis_description',
 			'focus_keyword' => '',
+		),
+		'aioseo' => array(
+			'title'         => '_aioseo_title',
+			'description'   => '_aioseo_description',
+			'focus_keyword' => '_aioseo_keywords',
+		),
+		'seopress' => array(
+			'title'         => '_seopress_titles_title',
+			'description'   => '_seopress_titles_desc',
+			'focus_keyword' => '_seopress_analysis_target_kw',
 		),
 	);
 
@@ -84,6 +96,25 @@ class SEO_Agent_AI_SEO_Plugin_Bridge {
 			$found[] = 'seoframework';
 		}
 
+		// All in One SEO (AIOSEO).
+		if (
+			defined( 'AIOSEO_VERSION' )
+			|| class_exists( 'AIOSEO\\Plugin\\AIOSEO', false )
+			|| class_exists( 'All_in_One_SEO_Pack', false )
+			|| function_exists( 'aioseo' )
+		) {
+			$found[] = 'aioseo';
+		}
+
+		// SEOPress.
+		if (
+			defined( 'SEOPRESS_VERSION' )
+			|| class_exists( 'SeoPress_Admin_Pages', false )
+			|| function_exists( 'seopress_activation' )
+		) {
+			$found[] = 'seopress';
+		}
+
 		$this->detected = $found;
 		return $found;
 	}
@@ -100,6 +131,8 @@ class SEO_Agent_AI_SEO_Plugin_Bridge {
 			'rankmath'     => 'RankMath SEO',
 			'smartcrawl'   => 'SmartCrawl',
 			'seoframework' => 'The SEO Framework',
+			'aioseo'       => 'All in One SEO',
+			'seopress'     => 'SEOPress',
 		);
 		return isset( $labels[ $slug ] ) ? $labels[ $slug ] : $slug;
 	}
