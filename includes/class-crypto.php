@@ -72,10 +72,26 @@ class SEO_Agent_AI_Crypto {
 	}
 
 	/**
-	 * Derive a 32-byte key from wp_salt(secure_auth).
+	 * Derive a 32-byte AES key.
+	 *
+	 * Prefers wp_salt('secure_auth') for maximum entropy. Falls back to the
+	 * AUTH_KEY / SECRET_KEY wp-config constants when wp_salt() is not yet
+	 * available (i.e. when called during early plugin load before
+	 * wp-includes/pluggable.php has been included). This prevents a fatal
+	 * "Call to undefined function wp_salt()" on sites where the plugin
+	 * constructor runs before WordPress finishes bootstrapping.
 	 */
 	private static function derive_key() {
-		return substr( hash( 'sha256', wp_salt( 'secure_auth' ), true ), 0, 32 );
+		if ( function_exists( 'wp_salt' ) ) {
+			$seed = wp_salt( 'secure_auth' );
+		} elseif ( defined( 'AUTH_KEY' ) && AUTH_KEY !== 'put your unique phrase here' ) {
+			$seed = AUTH_KEY;
+		} elseif ( defined( 'SECRET_KEY' ) ) {
+			$seed = SECRET_KEY;
+		} else {
+			$seed = DB_PASSWORD . DB_NAME;
+		}
+		return substr( hash( 'sha256', $seed, true ), 0, 32 );
 	}
 
 	/**

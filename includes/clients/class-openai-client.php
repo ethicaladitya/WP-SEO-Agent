@@ -35,8 +35,13 @@ class SEO_Agent_AI_OpenAI_Client {
 	const MAX_TOKENS       = 300;
 	const TEMPERATURE      = 0.4;
 
-	/** @var string */
-	private $api_key;
+	/**
+	 * Lazily-resolved API key. Null means not yet resolved.
+	 * Kept null in the constructor so crypto (wp_salt) is never called
+	 * during early plugin load — only resolved on the first actual API call.
+	 * @var string|null
+	 */
+	private $api_key = null;
 	/** @var string */
 	private $base_url;
 	/** @var string */
@@ -55,7 +60,10 @@ class SEO_Agent_AI_OpenAI_Client {
 	private $is_azure_v1;
 
 	public function __construct() {
-		$this->api_key     = $this->resolve_api_key();
+		// Do NOT resolve the API key here — Crypto::decrypt() calls wp_salt()
+		// which is not available during early plugin load (the plugin calls
+		// SEO_Agent_AI_Plugin::instance() at global scope). Key is resolved
+		// lazily on the first API call via get_api_key().
 		$this->base_url    = rtrim( $this->resolve_base_url(), '/' );
 		$this->model       = $this->resolve_model();
 		$this->is_azure    = ( strpos( $this->base_url, '.openai.azure.com' ) !== false );
@@ -70,10 +78,20 @@ class SEO_Agent_AI_OpenAI_Client {
 	// -------------------------------------------------------------------
 
 	/**
+	 * Lazily resolve and return the API key (decrypts on first call).
+	 */
+	private function get_api_key(): string {
+		if ( $this->api_key === null ) {
+			$this->api_key = $this->resolve_api_key();
+		}
+		return $this->api_key;
+	}
+
+	/**
 	 * Whether an API key is configured.
 	 */
 	public function is_configured() {
-		return $this->api_key !== '';
+		return $this->get_api_key() !== '';
 	}
 
 	/**
@@ -281,10 +299,10 @@ class SEO_Agent_AI_OpenAI_Client {
 
 		if ( $this->is_azure && ! $this->is_azure_v1 ) {
 			// Legacy Azure deployment endpoint uses the api-key header.
-			$headers['api-key'] = $this->api_key;
+			$headers['api-key'] = $this->get_api_key();
 		} else {
 			// Standard OpenAI + Azure /openai/v1 both use Bearer auth.
-			$headers['Authorization'] = 'Bearer ' . $this->api_key;
+			$headers['Authorization'] = 'Bearer ' . $this->get_api_key();
 		}
 
 		return $headers;
