@@ -6,13 +6,14 @@
  * provider can be swapped in the recommendation engine transparently.
  *
  * Supports any endpoint that speaks the OpenAI chat-completions API format:
- *   - Standard OpenAI:  https://api.openai.com/v1  (default)
- *   - Azure OpenAI:     https://{resource}.openai.azure.com/openai/deployments/{deploy}
- *   - Local / custom:   any OpenAI-compatible base URL
+ *   - Standard OpenAI:         https://api.openai.com/v1  (default)
+ *   - Azure legacy (per-deploy): https://{resource}.openai.azure.com/openai/deployments/{deploy}
+ *   - Azure OpenAI-compat (/v1): https://{resource}.openai.azure.com/openai/v1
+ *   - Local / custom:           any OpenAI-compatible base URL
  *
- * Azure endpoints are detected automatically via the presence of
- * ".openai.azure.com" in the base URL and switch to the `api-key` header.
- * This is a code-level detail; the admin UI presents a neutral "Base URL" field.
+ * Azure legacy endpoints: use `api-key` header + append ?api-version=2024-02-01.
+ * Azure /openai/v1 endpoints: use `Authorization: Bearer` (OpenAI-compatible) — no api-version.
+ * Detection is automatic; the admin UI presents a neutral "Base URL" field.
  *
  * @package SEO_Agent_AI
  */
@@ -40,14 +41,28 @@ class SEO_Agent_AI_OpenAI_Client {
 	private $base_url;
 	/** @var string */
 	private $model;
-	/** @var bool */
+	/**
+	 * True for any *.openai.azure.com URL.
+	 * @var bool
+	 */
 	private $is_azure;
 
+	/**
+	 * True when using the new Azure /openai/v1 OpenAI-compatible endpoint.
+	 * This format uses Bearer auth and does not require an api-version param.
+	 * @var bool
+	 */
+	private $is_azure_v1;
+
 	public function __construct() {
-		$this->api_key  = $this->resolve_api_key();
-		$this->base_url = rtrim( $this->resolve_base_url(), '/' );
-		$this->model    = $this->resolve_model();
-		$this->is_azure = ( strpos( $this->base_url, '.openai.azure.com' ) !== false );
+		$this->api_key     = $this->resolve_api_key();
+		$this->base_url    = rtrim( $this->resolve_base_url(), '/' );
+		$this->model       = $this->resolve_model();
+		$this->is_azure    = ( strpos( $this->base_url, '.openai.azure.com' ) !== false );
+		$this->is_azure_v1 = $this->is_azure && (
+			str_ends_with( $this->base_url, '/openai/v1' ) ||
+			strpos( $this->base_url, '/openai/v1/' ) !== false
+		);
 	}
 
 	// -------------------------------------------------------------------
@@ -239,26 +254,36 @@ class SEO_Agent_AI_OpenAI_Client {
 
 	/**
 	 * Build the completions endpoint URL.
+	 *
+	 * - Azure /openai/v1  → {base_url}/chat/completions  (no api-version)
+	 * - Azure legacy      → {base_url}/chat/completions?api-version=2024-02-01
+	 * - Standard/custom   → {base_url}/chat/completions
 	 */
 	private function build_endpoint() {
-		if ( $this->is_azure ) {
-			// Azure format: {base_url}/chat/completions?api-version=2024-02-01
+		if ( $this->is_azure && ! $this->is_azure_v1 ) {
+			// Legacy deployment-specific Azure format requires api-version.
 			return $this->base_url . '/chat/completions?api-version=2024-02-01';
 		}
+		// OpenAI format (standard, custom, and Azure /openai/v1).
 		return $this->base_url . '/chat/completions';
 	}
 
 	/**
-	 * Build request headers. Azure uses api-key; standard uses Bearer token.
+	 * Build request headers.
+	 *
+	 * - Azure legacy (/openai/deployments/…) → api-key header
+	 * - Everything else (standard OpenAI, Azure /openai/v1) → Authorization: Bearer
 	 */
 	private function build_headers() {
 		$headers = array(
 			'Content-Type' => 'application/json',
 		);
 
-		if ( $this->is_azure ) {
+		if ( $this->is_azure && ! $this->is_azure_v1 ) {
+			// Legacy Azure deployment endpoint uses the api-key header.
 			$headers['api-key'] = $this->api_key;
 		} else {
+			// Standard OpenAI + Azure /openai/v1 both use Bearer auth.
 			$headers['Authorization'] = 'Bearer ' . $this->api_key;
 		}
 
