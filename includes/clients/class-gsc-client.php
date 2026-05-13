@@ -716,10 +716,22 @@ class SEO_Agent_AI_GSC_Client {
 	}
 
 	private function get_access_token() {
+		// Prefer Site Kit's already-verified OAuth token when available.
+		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) {
+			return SEO_Agent_AI_SiteKit_Bridge::get_access_token();
+		}
 		return $this->google_auth->get_access_token();
 	}
 
 	private function get_site_url() {
+		// Use Site Kit's stored Search Console property when available.
+		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) {
+			$sk_url = SEO_Agent_AI_SiteKit_Bridge::get_gsc_site_url();
+			if ( $sk_url !== '' ) {
+				return $this->normalize_site_url( $sk_url );
+			}
+		}
+
 		$constant = defined( 'SEO_AGENT_AI_GSC_SITE_URL' ) ? SEO_AGENT_AI_GSC_SITE_URL : '';
 		if ( is_string( $constant ) && $constant !== '' ) {
 			return $this->normalize_site_url( $constant );

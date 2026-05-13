@@ -58,6 +58,33 @@ class SEO_Agent_AI_Connect_Page {
 				<?php esc_html_e( 'SEO Agent AI needs access to Google Search Console and Google Analytics to analyze your content performance.', 'seo-agent-ai' ); ?>
 			</p>
 
+			<?php if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) : ?>
+				<div class="notice notice-success" style="margin-top:12px;">
+					<p>
+						<strong>&#10003; <?php esc_html_e( 'Connected via Google Site Kit', 'seo-agent-ai' ); ?></strong>
+						&mdash;
+						<?php
+						printf(
+							/* translators: %s: Site Kit settings URL */
+							esc_html__( 'SEO Agent AI is already using your Site Kit connection for Search Console (%1$s) and Analytics (property %2$s). No manual setup needed.', 'seo-agent-ai' ),
+							'<code>' . esc_html( SEO_Agent_AI_SiteKit_Bridge::get_gsc_site_url() ) . '</code>',
+							'<code>' . esc_html( SEO_Agent_AI_SiteKit_Bridge::get_ga4_property_id() ) . '</code>'
+						);
+						?>
+					</p>
+				</div>
+			<?php elseif ( ! defined( 'GOOGLESITEKIT_VERSION' ) ) : ?>
+				<div class="notice notice-info" style="margin-top:12px;">
+					<p>
+						<strong><?php esc_html_e( 'Easier option:', 'seo-agent-ai' ); ?></strong>
+						<?php esc_html_e( 'Install Google Site Kit and SEO Agent AI will connect automatically — no OAuth setup required.', 'seo-agent-ai' ); ?>
+						<a href="<?php echo esc_url( admin_url( 'plugin-install.php?s=google+site+kit&tab=search&type=term' ) ); ?>" style="margin-left:4px;">
+							<?php esc_html_e( 'Install Site Kit', 'seo-agent-ai' ); ?> &rarr;
+						</a>
+					</p>
+				</div>
+			<?php endif; ?>
+
 			<?php if ( $oauth_error ) : ?>
 				<div class="notice notice-error"><p><?php echo esc_html( $oauth_error ); ?></p></div>
 			<?php endif; ?>

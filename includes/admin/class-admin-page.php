@@ -541,8 +541,55 @@ class SEO_Agent_AI_Admin_Page {
 				<?php wp_nonce_field( 'seo_agent_ai_save_settings' ); ?>
 				<input type="hidden" name="action" value="seo_agent_ai_save_settings" />
 
+				<?php
+				$sitekit_active = class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active();
+				?>
+
+				<?php if ( $sitekit_active ) : ?>
+				<div class="seo-agent-card seo-agent-settings-section">
+					<h2>
+						<?php esc_html_e( 'Google Data Sources', 'seo-agent-ai' ); ?>
+						<span style="display:inline-flex;align-items:center;gap:6px;margin-left:10px;font-size:13px;font-weight:400;color:#1d7b2e;">
+							<span style="width:10px;height:10px;border-radius:50%;background:#1d7b2e;display:inline-block;"></span>
+							<?php esc_html_e( 'Connected via Google Site Kit', 'seo-agent-ai' ); ?>
+						</span>
+					</h2>
+					<p class="description" style="margin-bottom:14px;">
+						<?php esc_html_e( 'Google Site Kit is active and connected. SEO Agent AI is automatically using your existing Search Console and Analytics connection — no additional setup needed.', 'seo-agent-ai' ); ?>
+					</p>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Search Console', 'seo-agent-ai' ); ?></th>
+							<td>
+								<code><?php echo esc_html( SEO_Agent_AI_SiteKit_Bridge::get_gsc_site_url() ); ?></code>
+								<p class="description"><?php esc_html_e( 'Pulled automatically from Site Kit. Change the property in the Site Kit plugin.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+						<?php if ( SEO_Agent_AI_SiteKit_Bridge::is_ga4_active() ) : ?>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Analytics (GA4)', 'seo-agent-ai' ); ?></th>
+							<td>
+								<code><?php echo esc_html( 'Property ' . SEO_Agent_AI_SiteKit_Bridge::get_ga4_property_id() ); ?></code>
+								<p class="description"><?php esc_html_e( 'Pulled automatically from Site Kit. Change the property in the Site Kit plugin.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+						<?php endif; ?>
+					</table>
+				</div>
+				<?php else : ?>
+
 				<div class="seo-agent-card seo-agent-settings-section">
 					<h2><?php esc_html_e( 'Google OAuth Credentials', 'seo-agent-ai' ); ?></h2>
+					<div class="notice notice-info inline" style="margin:0 0 14px;">
+						<p>
+							<?php
+							esc_html_e( 'Tip: Install the free Google Site Kit plugin to connect Search Console and Analytics automatically — no credentials needed.', 'seo-agent-ai' );
+							?>
+							<a href="<?php echo esc_url( admin_url( 'plugin-install.php?s=google+site+kit&tab=search&type=term' ) ); ?>" style="margin-left:6px;">
+								<?php esc_html_e( 'Install Site Kit', 'seo-agent-ai' ); ?> &rarr;
+							</a>
+						</p>
+					</div>
 					<p class="description" style="margin-bottom:14px;">
 						<?php
 						printf(
@@ -600,6 +647,8 @@ class SEO_Agent_AI_Admin_Page {
 						</tr>
 					</table>
 				</div>
+
+				<?php endif; // $sitekit_active ?>
 
 				<div class="seo-agent-card seo-agent-settings-section">
 					<h2><?php esc_html_e( 'SEO Plugin Integration', 'seo-agent-ai' ); ?></h2>

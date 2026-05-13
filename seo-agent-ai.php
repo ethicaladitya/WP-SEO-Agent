@@ -34,6 +34,7 @@ require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-db-manager.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-logger.php';
 
 // Google API clients.
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-sitekit-bridge.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-google-oauth.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-gsc-client.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/clients/class-ga4-client.php';

@@ -584,10 +584,22 @@ class SEO_Agent_AI_GA4_Client {
 	}
 
 	private function get_access_token() {
+		// Prefer Site Kit's already-verified OAuth token when available.
+		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) {
+			return SEO_Agent_AI_SiteKit_Bridge::get_access_token();
+		}
 		return $this->google_auth->get_access_token();
 	}
 
 	private function get_property_id() {
+		// Use Site Kit's stored GA4 property ID when available.
+		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_ga4_active() ) {
+			$sk_id = SEO_Agent_AI_SiteKit_Bridge::get_ga4_property_id();
+			if ( $sk_id !== '' ) {
+				return $sk_id;
+			}
+		}
+
 		$constant = defined( 'SEO_AGENT_AI_GA4_PROPERTY_ID' ) ? SEO_AGENT_AI_GA4_PROPERTY_ID : '';
 		if ( is_string( $constant ) && $constant !== '' ) {
 			return trim( $constant );
