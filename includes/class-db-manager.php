@@ -269,9 +269,9 @@ class SEO_Agent_AI_DB_Manager {
 	}
 
 	/**
-	 * Fetch pending decisions, newest first.
+	 * Fetch decisions, newest first.
 	 *
-	 * @param array $args Optional: post_id, risk_level, limit, offset.
+	 * @param array $args Optional: post_id, risk_level, date_from, date_to, limit, offset.
 	 * @return array
 	 */
 	public static function get_decisions( array $args = array() ) {
@@ -287,6 +287,12 @@ class SEO_Agent_AI_DB_Manager {
 		}
 		if ( ! empty( $args['risk_level'] ) ) {
 			$where .= $wpdb->prepare( ' AND risk_level = %s', $args['risk_level'] );
+		}
+		if ( ! empty( $args['date_from'] ) ) {
+			$where .= $wpdb->prepare( ' AND created_at >= %s', $args['date_from'] );
+		}
+		if ( ! empty( $args['date_to'] ) ) {
+			$where .= $wpdb->prepare( ' AND created_at <= %s', $args['date_to'] );
 		}
 
 		$table = self::ai_decisions_table();
@@ -399,6 +405,112 @@ class SEO_Agent_AI_DB_Manager {
 			'signal_data'         => wp_json_encode( $signals ),
 			'recorded_at'         => current_time( 'mysql', true ),
 		) );
+	}
+
+	/**
+	 * Upsert a page insight from ScoringEngine::score() output.
+	 * One row per post per calendar day — updates if today's row already exists.
+	 *
+	 * @param int   $post_id
+	 * @param array $score_data  Keys: overall (int), dimensions (array), signals (array), improvements (array).
+	 */
+	public static function upsert_page_insight( $post_id, array $score_data ) {
+		global $wpdb;
+
+		$clamp = function( $v ) { return max( 0, min( 100, (int) round( (float) $v ) ) ); };
+		$dims  = isset( $score_data['dimensions'] ) && is_array( $score_data['dimensions'] ) ? $score_data['dimensions'] : array();
+		$today = gmdate( 'Y-m-d' );
+		$table = self::page_insights_table();
+
+		$existing = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+			"SELECT id FROM {$table} WHERE post_id = %d AND DATE(recorded_at) = %s LIMIT 1",
+			(int) $post_id,
+			$today
+		) );
+
+		$row = array(
+			'score_overall'        => $clamp( $score_data['overall'] ?? 0 ),
+			'score_metadata'       => $clamp( $dims['metadata'] ?? 0 ),
+			'score_content'        => $clamp( $dims['content'] ?? 0 ),
+			'score_internal_links' => $clamp( $dims['internal_links'] ?? 0 ),
+			'score_schema'         => $clamp( $dims['schema'] ?? 0 ),
+			'score_engagement'     => $clamp( $dims['engagement'] ?? 0 ),
+			'score_freshness'      => $clamp( $dims['freshness'] ?? 0 ),
+			'signal_data'          => wp_json_encode( array(
+				'signals'      => $score_data['signals'] ?? array(),
+				'improvements' => $score_data['improvements'] ?? array(),
+			) ),
+			'recorded_at'          => current_time( 'mysql', true ),
+		);
+
+		if ( $existing ) {
+			$wpdb->update( $table, $row, array( 'id' => (int) $existing ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} else {
+			$row['post_id'] = (int) $post_id;
+			$wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Update the engagement score on the most recent insight row from GA4 landing page data.
+	 *
+	 * @param int   $post_id
+	 * @param array $item  Keys: engagement_rate (0-1 float), bounce_rate (0-1 float), avg_time_sec (int), sessions (int).
+	 */
+	public static function upsert_page_insight_engagement( $post_id, array $item ) {
+		global $wpdb;
+		$table = self::page_insights_table();
+
+		$existing_id = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+			"SELECT id FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT 1",
+			(int) $post_id
+		) );
+
+		$engagement_score = self::calc_engagement_score( $item );
+
+		if ( ! $existing_id ) {
+			$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				'post_id'              => (int) $post_id,
+				'score_overall'        => $engagement_score,
+				'score_metadata'       => 0,
+				'score_content'        => 0,
+				'score_internal_links' => 0,
+				'score_schema'         => 0,
+				'score_engagement'     => $engagement_score,
+				'score_freshness'      => 0,
+				'signal_data'          => wp_json_encode( array( 'ga4' => $item ) ),
+				'recorded_at'          => current_time( 'mysql', true ),
+			) );
+			return;
+		}
+
+		$wpdb->update( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			'score_engagement' => $engagement_score,
+		), array( 'id' => (int) $existing_id ) );
+	}
+
+	/**
+	 * Purge records older than the retention window across all tables.
+	 * Keeps pending decisions regardless of age.
+	 *
+	 * @param int $retention_days  Minimum 7 days.
+	 */
+	public static function purge_old_data( $retention_days = 90 ) {
+		global $wpdb;
+
+		$days        = max( 7, (int) $retention_days );
+		$cutoff_dt   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$days} days" ) );
+		$cutoff_date = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
+
+		$kh = self::keyword_history_table();
+		$pi = self::page_insights_table();
+		$ad = self::ai_decisions_table();
+		$dr = self::daily_reports_table();
+
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$kh} WHERE recorded_at < %s", $cutoff_date ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$pi} WHERE recorded_at < %s", $cutoff_dt ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$ad} WHERE status IN ('applied','rejected','discarded') AND created_at < %s", $cutoff_dt ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$dr} WHERE report_date < %s", $cutoff_date ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
 	}
 
 	/**
@@ -652,5 +764,32 @@ class SEO_Agent_AI_DB_Manager {
 			'problems_detected'      => $data['problems_detected'] ?? 0,
 		);
 		self::upsert_daily_report( $date, $report, $counts );
+	}
+
+	// -------------------------------------------------------------------
+	// Private helpers
+	// -------------------------------------------------------------------
+
+	/**
+	 * Derive a 0-100 engagement score from GA4 landing page quality metrics.
+	 *
+	 * @param array $item  Keys: engagement_rate (0-1), avg_time_sec, bounce_rate (0-1).
+	 * @return int
+	 */
+	private static function calc_engagement_score( array $item ) {
+		$engagement_rate = (float) ( $item['engagement_rate'] ?? 0.0 );
+		$avg_time        = (int)   ( $item['avg_time_sec']    ?? 0 );
+		$bounce_rate     = (float) ( $item['bounce_rate']     ?? 1.0 );
+
+		// engagement_rate 0-1 → 0-50 pts.
+		$score = $engagement_rate * 50.0;
+
+		// avg_time: 8 sec per point, max 30 pts (≈240 s).
+		$score += min( 30.0, $avg_time / 8.0 );
+
+		// High bounce penalises up to 20 pts.
+		$score -= $bounce_rate * 20.0;
+
+		return max( 0, min( 100, (int) round( $score ) ) );
 	}
 }
