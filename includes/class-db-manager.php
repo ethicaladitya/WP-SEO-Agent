@@ -732,6 +732,34 @@ class SEO_Agent_AI_DB_Manager {
 	}
 
 	/**
+	 * Get post IDs whose most-recent page insight score is below a threshold.
+	 * Returns post IDs ordered by score ascending (worst-scoring posts first).
+	 *
+	 * @param int $threshold Posts with score_overall < threshold are returned (1-100).
+	 * @param int $limit     Maximum number of post IDs to return.
+	 * @return int[]
+	 */
+	public static function get_posts_below_score_threshold( $threshold = 70, $limit = 30 ) {
+		global $wpdb;
+		$table = self::page_insights_table();
+		$rows  = $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+			"SELECT pi.post_id
+			 FROM {$table} pi
+			 INNER JOIN (
+			     SELECT post_id, MAX(recorded_at) AS max_at
+			     FROM {$table}
+			     GROUP BY post_id
+			 ) latest ON pi.post_id = latest.post_id AND pi.recorded_at = latest.max_at
+			 WHERE pi.score_overall < %d
+			 ORDER BY pi.score_overall ASC
+			 LIMIT %d",
+			max( 0, min( 100, (int) $threshold ) ),
+			max( 1, (int) $limit )
+		) );
+		return array_map( 'intval', is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
 	 * Get activity log entries created within a datetime range.
 	 *
 	 * @param string $date_from 'Y-m-d H:i:s'

@@ -56,6 +56,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_autopilot_min_confidence',
 		'seo_agent_ai_log_retention_days',
 		'seo_agent_ai_email_reports',
+		// Score improvement target.
+		'seo_agent_ai_score_target',
 		// Debug / mode.
 		'seo_agent_ai_debug_mode',
 		'seo_agent_ai_verbose_mode',
@@ -135,6 +137,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_run_internal_links',
 		'seo_agent_purge_old_data',
 		'seo_agent_detect_cannibalization',
+		'seo_agent_score_and_improve',
 	);
 	foreach ( $seo_agent_ai_cron_hooks as $seo_agent_ai_hook ) {
 		wp_clear_scheduled_hook( $seo_agent_ai_hook );
