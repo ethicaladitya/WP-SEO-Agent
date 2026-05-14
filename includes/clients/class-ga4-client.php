@@ -6,8 +6,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class SEO_Agent_AI_GA4_Client {
 
-	const OPTION_ACCESS_TOKEN    = 'seo_agent_ai_google_access_token';
-	const OPTION_GA4_PROPERTY_ID = 'seo_agent_ai_ga4_property_id';
+	const OPTION_ACCESS_TOKEN      = 'seo_agent_ai_google_access_token';
+	const OPTION_GA4_PROPERTY_ID   = 'seo_agent_ai_ga4_property_id';
+	const PAGE_METRICS_CACHE_TTL    = 15 * MINUTE_IN_SECONDS;
+	const PAGE_METRICS_CACHE_PREFIX = 'seo_agent_ga4_page_';
 
 	private $google_auth;
 
@@ -16,10 +18,16 @@ class SEO_Agent_AI_GA4_Client {
 	}
 
 	// -------------------------------------------------------------------
-	// Core page metrics (existing, unchanged interface)
+	// Core page metrics
 	// -------------------------------------------------------------------
 
 	public function get_page_metrics( $page_url ) {
+		$cache_key = self::PAGE_METRICS_CACHE_PREFIX . md5( $page_url );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
 		$property_id  = $this->normalize_property_id( $this->get_property_id() );
 		$access_token = $this->get_access_token();
 
@@ -51,26 +59,22 @@ class SEO_Agent_AI_GA4_Client {
 		$current_sessions  = isset( $current['sessions'] ) ? (float) $current['sessions'] : 0.0;
 		$previous_sessions = isset( $previous['sessions'] ) ? (float) $previous['sessions'] : 0.0;
 
-		return array(
-			'source'             => 'live',
-			'engagement_rate'    => isset( $current['engagement_rate'] ) ? (float) $current['engagement_rate'] : 0.0,
+		$result = array(
+			'source'               => 'live',
+			'engagement_rate'      => isset( $current['engagement_rate'] ) ? (float) $current['engagement_rate'] : 0.0,
 			'avg_time_on_page_sec' => isset( $current['avg_time_on_page_sec'] ) ? (int) $current['avg_time_on_page_sec'] : 0,
-			'sessions_28d'       => (int) round( $current_sessions ),
-			'sessions_trend_28d' => $this->trend_percent( $current_sessions, $previous_sessions ),
+			'sessions_28d'         => (int) round( $current_sessions ),
+			'sessions_trend_28d'   => $this->trend_percent( $current_sessions, $previous_sessions ),
 		);
+
+		set_transient( $cache_key, $result, self::PAGE_METRICS_CACHE_TTL );
+		return $result;
 	}
 
 	// -------------------------------------------------------------------
 	// Advanced analytics methods
 	// -------------------------------------------------------------------
 
-	/**
-	 * Get organic traffic metrics for a specific page (sessions from organic search).
-	 *
-	 * @param string $page_url
-	 * @param int    $days  Lookback window.
-	 * @return array|WP_Error  Keys: organic_sessions, organic_engagement_rate, organic_avg_time_sec.
-	 */
 	public function get_organic_traffic( $page_url, $days = 28 ) {
 		$property_id  = $this->normalize_property_id( $this->get_property_id() );
 		$access_token = $this->get_access_token();
@@ -90,10 +94,7 @@ class SEO_Agent_AI_GA4_Client {
 
 		$payload = array(
 			'dateRanges'      => array(
-				array(
-					'startDate' => $days . 'daysAgo',
-					'endDate'   => '1daysAgo',
-				),
+				array( 'startDate' => $days . 'daysAgo', 'endDate' => '1daysAgo' ),
 			),
 			'dimensions'      => array(
 				array( 'name' => 'pagePath' ),
@@ -141,14 +142,6 @@ class SEO_Agent_AI_GA4_Client {
 		);
 	}
 
-	/**
-	 * Get landing page quality metrics across all landing pages.
-	 * Returns pages sorted by bounce rate (highest bounce first) for action priority.
-	 *
-	 * @param int $days  Lookback window.
-	 * @param int $limit Max pages to return.
-	 * @return array[]|WP_Error
-	 */
 	public function get_landing_page_quality( $days = 28, $limit = 50 ) {
 		$property_id  = $this->normalize_property_id( $this->get_property_id() );
 		$access_token = $this->get_access_token();
@@ -196,26 +189,18 @@ class SEO_Agent_AI_GA4_Client {
 			}
 
 			$result[] = array(
-				'page'              => $path,
-				'sessions'          => (int) round( (float) ( $metrics[0]['value'] ?? 0 ) ),
-				'bounce_rate'       => round( (float) ( $metrics[1]['value'] ?? 0.0 ), 4 ),
-				'engagement_rate'   => round( (float) ( $metrics[2]['value'] ?? 0.0 ), 4 ),
-				'avg_time_sec'      => (int) round( (float) ( $metrics[3]['value'] ?? 0 ) ),
+				'page'            => $path,
+				'sessions'        => (int) round( (float) ( $metrics[0]['value'] ?? 0 ) ),
+				'bounce_rate'     => round( (float) ( $metrics[1]['value'] ?? 0.0 ), 4 ),
+				'engagement_rate' => round( (float) ( $metrics[2]['value'] ?? 0.0 ), 4 ),
+				'avg_time_sec'    => (int) round( (float) ( $metrics[3]['value'] ?? 0 ) ),
 			);
 		}
 
-		// Sort by bounce rate descending (most problematic first).
 		usort( $result, fn( $a, $b ) => $b['bounce_rate'] <=> $a['bounce_rate'] );
 		return $result;
 	}
 
-	/**
-	 * Get exit rate data for pages — identifies pages where users give up before converting.
-	 *
-	 * @param int $days  Lookback window.
-	 * @param int $limit Max pages.
-	 * @return array[]|WP_Error
-	 */
 	public function get_exit_page_data( $days = 28, $limit = 50 ) {
 		$property_id  = $this->normalize_property_id( $this->get_property_id() );
 		$access_token = $this->get_access_token();
@@ -253,9 +238,9 @@ class SEO_Agent_AI_GA4_Client {
 
 		$result = array();
 		foreach ( $data['rows'] ?? array() as $row ) {
-			$dims    = $row['dimensionValues'] ?? array();
-			$metrics = $row['metricValues'] ?? array();
-			$path    = $dims[0]['value'] ?? '';
+			$dims     = $row['dimensionValues'] ?? array();
+			$metrics  = $row['metricValues'] ?? array();
+			$path     = $dims[0]['value'] ?? '';
 			$sessions = (int) round( (float) ( $metrics[0]['value'] ?? 0 ) );
 
 			if ( $path === '' || $sessions < 10 ) {
@@ -273,15 +258,6 @@ class SEO_Agent_AI_GA4_Client {
 		return $result;
 	}
 
-	/**
-	 * Get scroll depth approximation via event-based engagement metrics.
-	 * GA4 doesn't expose raw scroll depth without custom events, so this
-	 * uses scroll events (90% threshold) if the site has enhanced measurement on.
-	 *
-	 * @param string $page_url
-	 * @param int    $days
-	 * @return array  Keys: scroll_event_count, sessions, scroll_rate.
-	 */
 	public function get_scroll_depth( $page_url, $days = 28 ) {
 		$property_id  = $this->normalize_property_id( $this->get_property_id() );
 		$access_token = $this->get_access_token();
@@ -337,9 +313,9 @@ class SEO_Agent_AI_GA4_Client {
 			return array( 'scroll_event_count' => 0, 'sessions' => 0, 'scroll_rate' => 0.0 );
 		}
 
-		$row     = $data['rows'][0];
-		$metrics = $row['metricValues'] ?? array();
-		$scroll  = (int) round( (float) ( $metrics[0]['value'] ?? 0 ) );
+		$row      = $data['rows'][0];
+		$metrics  = $row['metricValues'] ?? array();
+		$scroll   = (int) round( (float) ( $metrics[0]['value'] ?? 0 ) );
 		$sessions = (int) round( (float) ( $metrics[1]['value'] ?? 0 ) );
 
 		return array(
@@ -350,7 +326,7 @@ class SEO_Agent_AI_GA4_Client {
 	}
 
 	// -------------------------------------------------------------------
-	// Connection test & property listing (unchanged)
+	// Connection test & property listing
 	// -------------------------------------------------------------------
 
 	public function test_connection() {
@@ -534,20 +510,12 @@ class SEO_Agent_AI_GA4_Client {
 			: array();
 
 		return array(
-			'engagement_rate'    => isset( $row[0]['value'] ) ? (float) $row[0]['value'] : 0.0,
+			'engagement_rate'      => isset( $row[0]['value'] ) ? (float) $row[0]['value'] : 0.0,
 			'avg_time_on_page_sec' => isset( $row[1]['value'] ) ? (int) round( (float) $row[1]['value'] ) : 0,
-			'sessions'           => isset( $row[2]['value'] ) ? (float) $row[2]['value'] : 0.0,
+			'sessions'             => isset( $row[2]['value'] ) ? (float) $row[2]['value'] : 0.0,
 		);
 	}
 
-	/**
-	 * Generic POST wrapper to the GA4 Data API.
-	 *
-	 * @param string $endpoint
-	 * @param string $access_token
-	 * @param array  $payload
-	 * @return array|WP_Error  Decoded response body on success.
-	 */
 	private function api_post( $endpoint, $access_token, array $payload ) {
 		$response = wp_remote_post(
 			$endpoint,
@@ -584,7 +552,6 @@ class SEO_Agent_AI_GA4_Client {
 	}
 
 	private function get_access_token() {
-		// Prefer Site Kit's already-verified OAuth token when available.
 		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) {
 			return SEO_Agent_AI_SiteKit_Bridge::get_access_token();
 		}
@@ -592,7 +559,6 @@ class SEO_Agent_AI_GA4_Client {
 	}
 
 	private function get_property_id() {
-		// Use Site Kit's stored GA4 property ID when available.
 		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_ga4_active() ) {
 			$sk_id = SEO_Agent_AI_SiteKit_Bridge::get_ga4_property_id();
 			if ( $sk_id !== '' ) {

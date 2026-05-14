@@ -6,8 +6,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class SEO_Agent_AI_GSC_Client {
 
-	const OPTION_ACCESS_TOKEN = 'seo_agent_ai_google_access_token';
-	const OPTION_GSC_SITE_URL = 'seo_agent_ai_gsc_site_url';
+	const OPTION_ACCESS_TOKEN  = 'seo_agent_ai_google_access_token';
+	const OPTION_GSC_SITE_URL  = 'seo_agent_ai_gsc_site_url';
+	const PAGE_METRICS_CACHE_TTL = 15 * MINUTE_IN_SECONDS;
+	const PAGE_METRICS_CACHE_PREFIX = 'seo_agent_gsc_page_';
 
 	private $google_auth;
 
@@ -16,10 +18,16 @@ class SEO_Agent_AI_GSC_Client {
 	}
 
 	// -------------------------------------------------------------------
-	// Core page metrics (existing, unchanged interface)
+	// Core page metrics
 	// -------------------------------------------------------------------
 
 	public function get_page_metrics( $page_url ) {
+		$cache_key = self::PAGE_METRICS_CACHE_PREFIX . md5( $page_url );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
 
@@ -44,27 +52,23 @@ class SEO_Agent_AI_GSC_Client {
 		$current_impressions  = isset( $current['impressions_total'] ) ? (float) $current['impressions_total'] : 0.0;
 		$previous_impressions = isset( $previous['impressions_total'] ) ? (float) $previous['impressions_total'] : 0.0;
 
-		return array(
-			'source'               => 'live',
-			'queries'              => isset( $current['queries'] ) ? $current['queries'] : array(),
-			'impressions_total'    => (int) round( $current_impressions ),
-			'ctr_avg'              => isset( $current['ctr_avg'] ) ? (float) $current['ctr_avg'] : 0.0,
-			'position_avg'         => isset( $current['position_avg'] ) ? (float) $current['position_avg'] : 99.0,
+		$result = array(
+			'source'                => 'live',
+			'queries'               => isset( $current['queries'] ) ? $current['queries'] : array(),
+			'impressions_total'     => (int) round( $current_impressions ),
+			'ctr_avg'               => isset( $current['ctr_avg'] ) ? (float) $current['ctr_avg'] : 0.0,
+			'position_avg'          => isset( $current['position_avg'] ) ? (float) $current['position_avg'] : 99.0,
 			'impressions_trend_28d' => $this->trend_percent( $current_impressions, $previous_impressions ),
 		);
+
+		set_transient( $cache_key, $result, self::PAGE_METRICS_CACHE_TTL );
+		return $result;
 	}
 
 	// -------------------------------------------------------------------
 	// Advanced analytics methods
 	// -------------------------------------------------------------------
 
-	/**
-	 * Get per-query breakdown for a page with clicks/impressions/CTR/position.
-	 *
-	 * @param string $page_url
-	 * @param int    $days  Lookback window (default 28).
-	 * @return array[]|WP_Error  Array of query rows.
-	 */
 	public function get_page_queries( $page_url, $days = 28 ) {
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
@@ -85,12 +89,6 @@ class SEO_Agent_AI_GSC_Client {
 		return isset( $result['queries'] ) ? $result['queries'] : array();
 	}
 
-	/**
-	 * Get all pages currently ranking on page 2 (positions 11-20), ordered by impressions desc.
-	 *
-	 * @param int $days Lookback window.
-	 * @return array[]|WP_Error
-	 */
 	public function get_page2_pages( $days = 28 ) {
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
@@ -136,13 +134,6 @@ class SEO_Agent_AI_GSC_Client {
 		return $page2;
 	}
 
-	/**
-	 * Get pages where impressions declined significantly vs. the prior equal period.
-	 *
-	 * @param int   $days          Current window length.
-	 * @param float $threshold_pct Decline threshold (negative percent, default -15).
-	 * @return array[]|WP_Error
-	 */
 	public function get_declining_pages( $days = 28, $threshold_pct = -15.0 ) {
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
@@ -155,11 +146,8 @@ class SEO_Agent_AI_GSC_Client {
 			return new WP_Error( 'seo_agent_ai_gsc_not_configured', __( 'Google Search Console credentials are not configured.', 'seo-agent-ai' ) );
 		}
 
-		// Current window.
 		$curr_start = gmdate( 'Y-m-d', strtotime( '-' . ( (int) $days ) . ' days' ) );
 		$curr_end   = gmdate( 'Y-m-d', strtotime( '-1 day' ) );
-
-		// Previous equal-length window.
 		$prev_start = gmdate( 'Y-m-d', strtotime( '-' . ( (int) $days * 2 ) . ' days' ) );
 		$prev_end   = gmdate( 'Y-m-d', strtotime( '-' . ( (int) $days + 1 ) . ' days' ) );
 
@@ -183,7 +171,6 @@ class SEO_Agent_AI_GSC_Client {
 			return $prev_rows;
 		}
 
-		// Index previous rows by page URL.
 		$prev_index = array();
 		foreach ( $prev_rows as $row ) {
 			$page = $row['page'] ?? '';
@@ -194,10 +181,10 @@ class SEO_Agent_AI_GSC_Client {
 
 		$declining = array();
 		foreach ( $curr_rows as $row ) {
-			$page         = $row['page'] ?? '';
-			$curr_impr    = (int) ( $row['impressions'] ?? 0 );
-			$prev_impr    = isset( $prev_index[ $page ] ) ? $prev_index[ $page ] : 0;
-			$trend        = $this->trend_percent( $curr_impr, $prev_impr );
+			$page      = $row['page'] ?? '';
+			$curr_impr = (int) ( $row['impressions'] ?? 0 );
+			$prev_impr = isset( $prev_index[ $page ] ) ? $prev_index[ $page ] : 0;
+			$trend     = $this->trend_percent( $curr_impr, $prev_impr );
 
 			if ( $trend <= $threshold_pct && $curr_impr > 10 ) {
 				$declining[] = array(
@@ -215,13 +202,6 @@ class SEO_Agent_AI_GSC_Client {
 		return $declining;
 	}
 
-	/**
-	 * Get pages whose CTR is significantly below the position-based expectation.
-	 *
-	 * @param int   $days       Lookback window.
-	 * @param float $ratio_cap  CTR/expected_CTR ratio below which a page is flagged (default 0.6).
-	 * @return array[]|WP_Error
-	 */
 	public function get_ctr_anomalies( $days = 28, $ratio_cap = 0.60 ) {
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
@@ -276,13 +256,6 @@ class SEO_Agent_AI_GSC_Client {
 		return $anomalies;
 	}
 
-	/**
-	 * Get queries for multiple pages — used for cross-page cannibalization detection.
-	 *
-	 * @param int $days  Lookback window.
-	 * @param int $limit Max pages to query (high values hit API rate limits).
-	 * @return array  Keys: page URL, values: array of query rows.
-	 */
 	public function get_all_pages_queries( $days = 28, $limit = 50 ) {
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
@@ -295,7 +268,6 @@ class SEO_Agent_AI_GSC_Client {
 			return array();
 		}
 
-		// First get the top pages by impressions.
 		$start_date = gmdate( 'Y-m-d', strtotime( '-' . (int) $days . ' days' ) );
 		$end_date   = gmdate( 'Y-m-d', strtotime( '-1 day' ) );
 
@@ -312,30 +284,22 @@ class SEO_Agent_AI_GSC_Client {
 
 		$result = array();
 		foreach ( $pages as $page_row ) {
-			$page_url = $page_row['page'] ?? '';
-			if ( $page_url === '' ) {
+			$page_url_item = $page_row['page'] ?? '';
+			if ( $page_url_item === '' ) {
 				continue;
 			}
 
-			$query_data = $this->query_period( $site_url, $access_token, $page_url, $days, 1 );
+			$query_data = $this->query_period( $site_url, $access_token, $page_url_item, $days, 1 );
 			if ( ! is_wp_error( $query_data ) && ! empty( $query_data['queries'] ) ) {
-				$result[ $page_url ] = $query_data['queries'];
+				$result[ $page_url_item ] = $query_data['queries'];
 			}
 
-			usleep( 500000 ); // 0.5s rate limiting between pages.
+			usleep( 500000 );
 		}
 
 		return $result;
 	}
 
-	/**
-	 * Get per-query position history for a single page (daily snapshots).
-	 * Useful for tracking ranking trends stored to keyword_history table.
-	 *
-	 * @param string $page_url
-	 * @param int    $days  Lookback window (max 90).
-	 * @return array  Array of date => [query, position, impressions, clicks] rows.
-	 */
 	public function get_keyword_history( $page_url, $days = 90 ) {
 		$site_url     = $this->get_site_url();
 		$access_token = $this->get_access_token();
@@ -419,7 +383,7 @@ class SEO_Agent_AI_GSC_Client {
 	}
 
 	// -------------------------------------------------------------------
-	// Connection test & site listing (unchanged)
+	// Connection test & site listing
 	// -------------------------------------------------------------------
 
 	public function test_connection() {
@@ -570,14 +534,6 @@ class SEO_Agent_AI_GSC_Client {
 		return $this->normalize_rows( isset( $data['rows'] ) && is_array( $data['rows'] ) ? $data['rows'] : array() );
 	}
 
-	/**
-	 * Generic POST to searchAnalytics/query for dimension=page (no page filter).
-	 *
-	 * @param string $site_url
-	 * @param string $access_token
-	 * @param array  $payload
-	 * @return array[]|WP_Error  Raw row data with 'page', 'impressions', 'clicks', 'ctr', 'position'.
-	 */
 	private function post_search_analytics( $site_url, $access_token, array $payload ) {
 		$endpoint = 'https://searchconsole.googleapis.com/webmasters/v3/sites/' . rawurlencode( $site_url ) . '/searchAnalytics/query';
 
@@ -617,7 +573,6 @@ class SEO_Agent_AI_GSC_Client {
 				'position'    => round( (float) ( $row['position'] ?? 99.0 ), 1 ),
 			);
 
-			// Map dimension keys based on dimensions array.
 			$dims = $payload['dimensions'] ?? array();
 			foreach ( $dims as $idx => $dim ) {
 				$item[ $dim ] = isset( $keys[ $idx ] ) ? sanitize_text_field( (string) $keys[ $idx ] ) : '';
@@ -630,9 +585,9 @@ class SEO_Agent_AI_GSC_Client {
 	}
 
 	private function normalize_rows( array $rows ) {
-		$query_metrics        = array();
-		$impressions_total    = 0.0;
-		$clicks_total         = 0.0;
+		$query_metrics         = array();
+		$impressions_total     = 0.0;
+		$clicks_total          = 0.0;
 		$position_weighted_sum = 0.0;
 
 		foreach ( $rows as $row ) {
@@ -648,9 +603,9 @@ class SEO_Agent_AI_GSC_Client {
 
 			if ( ! isset( $query_metrics[ $query ] ) ) {
 				$query_metrics[ $query ] = array(
-					'query'            => $query,
-					'impressions'      => 0,
-					'clicks'           => 0,
+					'query'             => $query,
+					'impressions'       => 0,
+					'clicks'            => 0,
 					'position_weighted' => 0.0,
 				);
 			}
@@ -716,7 +671,6 @@ class SEO_Agent_AI_GSC_Client {
 	}
 
 	private function get_access_token() {
-		// Prefer Site Kit's already-verified OAuth token when available.
 		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) {
 			return SEO_Agent_AI_SiteKit_Bridge::get_access_token();
 		}
@@ -724,7 +678,6 @@ class SEO_Agent_AI_GSC_Client {
 	}
 
 	private function get_site_url() {
-		// Use Site Kit's stored Search Console property when available.
 		if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) {
 			$sk_url = SEO_Agent_AI_SiteKit_Bridge::get_gsc_site_url();
 			if ( $sk_url !== '' ) {
