@@ -74,6 +74,7 @@ require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-rollback-center-pag
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-cron-status-page.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-image-seo-page.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-redirects-page.php';
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-activity-log-page.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-admin-page.php';
 
 // Feature modules.

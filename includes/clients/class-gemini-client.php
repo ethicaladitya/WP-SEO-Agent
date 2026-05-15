@@ -19,10 +19,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class SEO_Agent_AI_Gemini_Client {
 
-	const OPTION_API_KEY     = 'seo_agent_ai_gemini_api_key';
-	const API_ENDPOINT       = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-	const REQUEST_TIMEOUT    = 20;
-	const MAX_OUTPUT_TOKENS  = 256;
+	const OPTION_API_KEY    = 'seo_agent_ai_gemini_api_key';
+	const API_ENDPOINT      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+	const REQUEST_TIMEOUT   = 20;
+	const MAX_OUTPUT_TOKENS = 256;
 
 	// -----------------------------------------------------------------------
 	// Public API
@@ -35,6 +35,23 @@ class SEO_Agent_AI_Gemini_Client {
 	 */
 	public function is_configured() {
 		return $this->get_api_key() !== '';
+	}
+
+	/**
+	 * Send a raw prompt and return the text response, or WP_Error on failure.
+	 *
+	 * @param string $prompt
+	 * @return string|WP_Error
+	 */
+	public function complete( $prompt ) {
+		if ( ! $this->is_configured() ) {
+			return new WP_Error( 'not_configured', __( 'Gemini API key not configured.', 'seo-agent-ai' ) );
+		}
+		$result = $this->generate( (string) $prompt );
+		if ( $result === null ) {
+			return new WP_Error( 'api_error', __( 'Gemini API returned no result.', 'seo-agent-ai' ) );
+		}
+		return $result;
 	}
 
 	/**
@@ -60,11 +77,11 @@ class SEO_Agent_AI_Gemini_Client {
 		$prompt .= "- Return ONLY the title text, no quotes, no explanation\n\n";
 
 		if ( $top_query !== '' ) {
-			$prompt .= "Primary keyword (from Search Console): " . $top_query . "\n";
+			$prompt .= 'Primary keyword (from Search Console): ' . $top_query . "\n";
 		}
-		$prompt .= "Post title: " . $post->post_title . "\n";
-		$prompt .= "Content snippet: " . $excerpt . "\n\n";
-		$prompt .= "Meta title:";
+		$prompt .= 'Post title: ' . $post->post_title . "\n";
+		$prompt .= 'Content snippet: ' . $excerpt . "\n\n";
+		$prompt .= 'Meta title:';
 
 		$result = $this->generate( $prompt );
 
@@ -101,11 +118,11 @@ class SEO_Agent_AI_Gemini_Client {
 		$prompt .= "- Return ONLY the description text, no quotes, no explanation\n\n";
 
 		if ( $top_query !== '' ) {
-			$prompt .= "Primary keyword (from Search Console): " . $top_query . "\n";
+			$prompt .= 'Primary keyword (from Search Console): ' . $top_query . "\n";
 		}
-		$prompt .= "Post title: " . $post->post_title . "\n";
-		$prompt .= "Content snippet: " . $excerpt . "\n\n";
-		$prompt .= "Meta description:";
+		$prompt .= 'Post title: ' . $post->post_title . "\n";
+		$prompt .= 'Content snippet: ' . $excerpt . "\n\n";
+		$prompt .= 'Meta description:';
 
 		$result = $this->generate( $prompt );
 
@@ -144,12 +161,12 @@ class SEO_Agent_AI_Gemini_Client {
 		$prompt .= "- It must match what users would realistically search for\n";
 		$prompt .= "- Return ONLY the keyword phrase, lowercase, no quotes, no explanation\n\n";
 
-		$prompt .= "Post title: " . $post->post_title . "\n";
+		$prompt .= 'Post title: ' . $post->post_title . "\n";
 		if ( $query_list !== '' ) {
 			$prompt .= "Google Search Console top queries:\n" . $query_list;
 		}
-		$prompt .= "Content snippet: " . $excerpt . "\n\n";
-		$prompt .= "Focus keyword:";
+		$prompt .= 'Content snippet: ' . $excerpt . "\n\n";
+		$prompt .= 'Focus keyword:';
 
 		$result = $this->generate( $prompt );
 
@@ -176,20 +193,22 @@ class SEO_Agent_AI_Gemini_Client {
 	private function generate( $prompt ) {
 		$api_key = $this->get_api_key();
 
-		$body = wp_json_encode( array(
-			'contents' => array(
-				array(
-					'parts' => array(
-						array( 'text' => $prompt ),
+		$body = wp_json_encode(
+			array(
+				'contents'         => array(
+					array(
+						'parts' => array(
+							array( 'text' => $prompt ),
+						),
 					),
 				),
-			),
-			'generationConfig' => array(
-				'maxOutputTokens' => self::MAX_OUTPUT_TOKENS,
-				'temperature'     => 0.4,
-				'topP'            => 0.9,
-			),
-		) );
+				'generationConfig' => array(
+					'maxOutputTokens' => self::MAX_OUTPUT_TOKENS,
+					'temperature'     => 0.4,
+					'topP'            => 0.9,
+				),
+			)
+		);
 
 		if ( $body === false ) {
 			return null;
@@ -202,7 +221,7 @@ class SEO_Agent_AI_Gemini_Client {
 				'headers' => array(
 					'Content-Type' => 'application/json',
 				),
-				'body' => $body,
+				'body'    => $body,
 			)
 		);
 

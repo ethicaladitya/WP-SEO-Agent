@@ -57,6 +57,9 @@ class SEO_Agent_AI_Admin_Page {
 	/** @var SEO_Agent_AI_Redirects_Page */
 	private $redirects_page;
 
+	/** @var SEO_Agent_AI_Activity_Log_Page */
+	private $activity_log_page;
+
 	public function __construct(
 		SEO_Agent_AI_Data_Store $data_store,
 		SEO_Agent_AI_Connect_Page $connect_page,
@@ -70,7 +73,8 @@ class SEO_Agent_AI_Admin_Page {
 		SEO_Agent_AI_Rollback_Center_Page $rollback_center_page,
 		SEO_Agent_AI_Cron_Status_Page $cron_status_page,
 		SEO_Agent_AI_Image_SEO_Page $image_seo_page,
-		SEO_Agent_AI_Redirects_Page $redirects_page
+		SEO_Agent_AI_Redirects_Page $redirects_page,
+		SEO_Agent_AI_Activity_Log_Page $activity_log_page
 	) {
 		$this->data_store             = $data_store;
 		$this->connect_page           = $connect_page;
@@ -85,6 +89,7 @@ class SEO_Agent_AI_Admin_Page {
 		$this->cron_status_page       = $cron_status_page;
 		$this->image_seo_page         = $image_seo_page;
 		$this->redirects_page         = $redirects_page;
+		$this->activity_log_page      = $activity_log_page;
 	}
 
 	// -------------------------------------------------------------------
@@ -183,6 +188,15 @@ class SEO_Agent_AI_Admin_Page {
 			'manage_options',
 			'seo-agent-redirects',
 			array( $this->redirects_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Audit Log', 'seo-agent-ai' ),
+			__( 'Audit Log', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-log',
+			array( $this->activity_log_page, 'render' )
 		);
 
 		add_submenu_page(

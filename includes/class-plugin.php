@@ -177,6 +177,7 @@ class SEO_Agent_AI_Plugin {
 		$cron_status_page       = new SEO_Agent_AI_Cron_Status_Page();
 		$image_seo_page         = new SEO_Agent_AI_Image_SEO_Page( $this->image_seo );
 		$redirects_page         = new SEO_Agent_AI_Redirects_Page( $this->redirect_manager );
+		$activity_log_page      = new SEO_Agent_AI_Activity_Log_Page( $this->activity_log, $this->logger );
 
 		$this->admin_page = new SEO_Agent_AI_Admin_Page(
 			$this->data_store,
@@ -191,7 +192,8 @@ class SEO_Agent_AI_Plugin {
 			$rollback_center_page,
 			$cron_status_page,
 			$image_seo_page,
-			$redirects_page
+			$redirects_page,
+			$activity_log_page
 		);
 
 		// Admin hooks.

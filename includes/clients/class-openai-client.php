@@ -31,9 +31,9 @@ class SEO_Agent_AI_OpenAI_Client {
 	const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 	const DEFAULT_MODEL    = 'gpt-4o-mini';
 
-	const REQUEST_TIMEOUT  = 25; // seconds
-	const MAX_TOKENS       = 300;
-	const TEMPERATURE      = 0.4;
+	const REQUEST_TIMEOUT = 25; // seconds
+	const MAX_TOKENS      = 300;
+	const TEMPERATURE     = 0.4;
 
 	/**
 	 * Lazily-resolved API key. Null means not yet resolved.
@@ -95,6 +95,23 @@ class SEO_Agent_AI_OpenAI_Client {
 	}
 
 	/**
+	 * Send a raw prompt and return the text response, or WP_Error on failure.
+	 *
+	 * @param string $prompt
+	 * @return string|WP_Error
+	 */
+	public function complete( $prompt ) {
+		if ( ! $this->is_configured() ) {
+			return new WP_Error( 'not_configured', __( 'OpenAI API key not configured.', 'seo-agent-ai' ) );
+		}
+		$result = $this->chat( (string) $prompt );
+		if ( $result === null ) {
+			return new WP_Error( 'api_error', __( 'OpenAI API returned no result.', 'seo-agent-ai' ) );
+		}
+		return $result;
+	}
+
+	/**
 	 * Generate an SEO meta title (≤ 60 characters).
 	 *
 	 * @param WP_Post $post
@@ -110,7 +127,7 @@ class SEO_Agent_AI_OpenAI_Client {
 		$query   = $top_query ? " The main search query is: \"{$top_query}\"." : '';
 
 		$prompt = "Write a single SEO meta title for the blog post below.{$query} "
-			. "Maximum 60 characters. Plain text only — no quotes, no markdown. "
+			. 'Maximum 60 characters. Plain text only — no quotes, no markdown. '
 			. "Make it compelling, specific, and aligned with search intent.\n\n"
 			. "Post title: {$post->post_title}\n"
 			. "Content excerpt: {$excerpt}";
@@ -135,7 +152,7 @@ class SEO_Agent_AI_OpenAI_Client {
 		$query   = $top_query ? " The main search query is: \"{$top_query}\"." : '';
 
 		$prompt = "Write a single SEO meta description for the blog post below.{$query} "
-			. "Maximum 155 characters. Plain text only — no quotes, no markdown. "
+			. 'Maximum 155 characters. Plain text only — no quotes, no markdown. '
 			. "Include the main keyword naturally and a clear value proposition.\n\n"
 			. "Post title: {$post->post_title}\n"
 			. "Content excerpt: {$excerpt}";
@@ -251,11 +268,14 @@ class SEO_Agent_AI_OpenAI_Client {
 			'temperature' => self::TEMPERATURE,
 		);
 
-		$response = wp_remote_post( $endpoint, array(
-			'headers' => $headers,
-			'body'    => wp_json_encode( $body ),
-			'timeout' => self::REQUEST_TIMEOUT,
-		) );
+		$response = wp_remote_post(
+			$endpoint,
+			array(
+				'headers' => $headers,
+				'body'    => wp_json_encode( $body ),
+				'timeout' => self::REQUEST_TIMEOUT,
+			)
+		);
 
 		if ( is_wp_error( $response ) ) {
 			return null;
@@ -386,7 +406,10 @@ class SEO_Agent_AI_OpenAI_Client {
 			$line = trim( $line );
 			if ( preg_match( '/^Q:\s*(.+)/i', $line, $m ) ) {
 				if ( $q !== '' && $a !== '' ) {
-					$items[] = array( 'question' => $q, 'answer' => $a );
+					$items[] = array(
+						'question' => $q,
+						'answer'   => $a,
+					);
 				}
 				$q = trim( $m[1] );
 				$a = '';
@@ -398,7 +421,10 @@ class SEO_Agent_AI_OpenAI_Client {
 		}
 
 		if ( $q !== '' && $a !== '' ) {
-			$items[] = array( 'question' => $q, 'answer' => $a );
+			$items[] = array(
+				'question' => $q,
+				'answer'   => $a,
+			);
 		}
 
 		return array_slice( $items, 0, 5 ); // Safety cap.
