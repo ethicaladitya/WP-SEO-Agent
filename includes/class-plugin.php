@@ -34,6 +34,7 @@ class SEO_Agent_AI_Plugin {
 	const CRON_HOOK_CANNIBAL        = 'seo_agent_detect_cannibalization';
 	const CRON_HOOK_IMPROVE         = 'seo_agent_score_and_improve';
 	const CRON_HOOK_ORPHAN          = 'seo_agent_detect_orphans';
+	const CRON_HOOK_IMAGE_ALTS      = 'seo_agent_generate_image_alts';
 
 	private static $instance = null;
 
@@ -97,6 +98,9 @@ class SEO_Agent_AI_Plugin {
 	/** @var SEO_Agent_AI_Queue_Manager */
 	private $queue_manager;
 
+	/** @var SEO_Agent_AI_GSC_Opportunity_Analyzer */
+	private $gsc_opportunity_analyzer;
+
 	/** @var SEO_Agent_AI_Admin_Page */
 	private $admin_page;
 
@@ -155,9 +159,10 @@ class SEO_Agent_AI_Plugin {
 		$this->fix_executor          = new SEO_Agent_AI_Fix_Executor( $this->activity_log, $this->bridge );
 
 		// Autonomous systems.
-		$this->internal_link_engine = new SEO_Agent_AI_Internal_Link_Engine( $this->logger );
-		$this->report_engine        = new SEO_Agent_AI_Report_Engine( $this->logger );
-		$this->queue_manager        = new SEO_Agent_AI_Queue_Manager( $this->logger );
+		$this->internal_link_engine     = new SEO_Agent_AI_Internal_Link_Engine( $this->logger );
+		$this->report_engine            = new SEO_Agent_AI_Report_Engine( $this->logger );
+		$this->queue_manager            = new SEO_Agent_AI_Queue_Manager( $this->logger );
+		$this->gsc_opportunity_analyzer = new SEO_Agent_AI_GSC_Opportunity_Analyzer( $this->gsc_client );
 
 		// Feature modules.
 		$this->image_seo        = new SEO_Agent_AI_Image_SEO( $this->gemini, $this->openai, $this->logger );
@@ -241,6 +246,9 @@ class SEO_Agent_AI_Plugin {
 		// Cron hook — orphan detection.
 		add_action( self::CRON_HOOK_ORPHAN, array( $this, 'run_detect_orphans' ) );
 
+		// Cron hook — daily image alt text generation (autopilot only).
+		add_action( self::CRON_HOOK_IMAGE_ALTS, array( $this, 'run_generate_image_alts' ) );
+
 		$this->image_seo->init_hooks();
 		$this->social_meta->init_hooks();
 		$this->meta_box->init_hooks();
@@ -267,6 +275,7 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_GSC,
 			self::CRON_HOOK_GA4,
 			self::CRON_HOOK_REPORT,
+			self::CRON_HOOK_IMAGE_ALTS,
 		);
 		$offset      = 0;
 		foreach ( $daily_hooks as $hook ) {
@@ -308,6 +317,7 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_CANNIBAL,
 			self::CRON_HOOK_IMPROVE,
 			self::CRON_HOOK_ORPHAN,
+			self::CRON_HOOK_IMAGE_ALTS,
 		);
 		foreach ( $all_hooks as $hook ) {
 			wp_clear_scheduled_hook( $hook );
@@ -363,6 +373,9 @@ class SEO_Agent_AI_Plugin {
 		}
 		if ( ! wp_next_scheduled( self::CRON_HOOK_ORPHAN ) ) {
 			wp_schedule_event( time() + DAY_IN_SECONDS + 3 * HOUR_IN_SECONDS, 'weekly', self::CRON_HOOK_ORPHAN );
+		}
+		if ( ! wp_next_scheduled( self::CRON_HOOK_IMAGE_ALTS ) ) {
+			wp_schedule_event( time() + 2 * HOUR_IN_SECONDS + 30 * MINUTE_IN_SECONDS, 'daily', self::CRON_HOOK_IMAGE_ALTS );
 		}
 
 		set_transient( 'seo_agent_ai_cron_checked', 1, HOUR_IN_SECONDS );
@@ -910,8 +923,13 @@ class SEO_Agent_AI_Plugin {
 	// -------------------------------------------------------------------
 
 	/**
-	 * Return $count posts using a persistent offset so every run covers
-	 * a different slice. Wraps around when the end of the list is reached.
+	 * Return $count posts for analysis.
+	 *
+	 * Up to half the slots are filled with posts flagged as high-priority by the
+	 * GSC opportunity analyzer (page-2 rankings, CTR anomalies, declining pages).
+	 * The remaining slots use a round-robin offset so every post is eventually
+	 * covered. Priority posts that also appear in the round-robin slice are
+	 * deduplicated so no post is analyzed twice in one run.
 	 *
 	 * @param int $count
 	 * @return WP_Post[]
@@ -922,39 +940,98 @@ class SEO_Agent_AI_Plugin {
 			$post_types = array( 'post' );
 		}
 
-		// Count total published posts across all configured post types.
+		// ------------------------------------------------------------------
+		// Priority posts from GSC site-level opportunity data (no API call —
+		// reads from the 6-hour transient populated by run_fetch_gsc).
+		// ------------------------------------------------------------------
+		$priority_ids = array();
+		$opportunities = $this->gsc_opportunity_analyzer->get_opportunities();
+
+		if ( is_array( $opportunities ) ) {
+			$opp_urls = array();
+			foreach ( array( 'page2_pages', 'ctr_anomalies', 'declining_pages' ) as $bucket ) {
+				foreach ( $opportunities[ $bucket ] ?? array() as $item ) {
+					if ( ! empty( $item['page'] ) ) {
+						$opp_urls[] = (string) $item['page'];
+					}
+				}
+			}
+
+			foreach ( array_unique( $opp_urls ) as $url ) {
+				$pid = url_to_postid( $url );
+				if ( $pid ) {
+					$priority_ids[] = (int) $pid;
+				}
+			}
+			$priority_ids = array_unique( $priority_ids );
+		}
+
+		$priority_posts = array();
+		$priority_slots = (int) floor( $count / 2 );
+
+		if ( ! empty( $priority_ids ) ) {
+			$priority_posts = get_posts(
+				array(
+					'post__in'      => array_slice( $priority_ids, 0, $priority_slots ),
+					'post_type'     => 'any',
+					'post_status'   => 'publish',
+					'numberposts'   => $priority_slots,
+					'orderby'       => 'post__in',
+					'no_found_rows' => true,
+				)
+			);
+		}
+
+		$seen_ids = array_map(
+			function ( $p ) {
+				return (int) $p->ID;
+			},
+			$priority_posts
+		);
+
+		// ------------------------------------------------------------------
+		// Round-robin fill for remaining slots.
+		// ------------------------------------------------------------------
 		$total = 0;
 		foreach ( $post_types as $pt ) {
 			$counts = wp_count_posts( $pt );
 			$total += isset( $counts->publish ) ? (int) $counts->publish : 0;
 		}
 
-		if ( $total === 0 ) {
-			return array();
+		$round_robin_posts = array();
+		if ( $total > 0 ) {
+			$offset = (int) get_option( 'seo_agent_ai_analysis_offset', 0 );
+			if ( $offset >= $total ) {
+				$offset = 0;
+			}
+
+			$remaining = $count - count( $priority_posts );
+			$batch     = get_posts(
+				array(
+					'post_type'     => $post_types,
+					'post_status'   => 'publish',
+					'numberposts'   => (int) $remaining,
+					'offset'        => $offset,
+					'orderby'       => 'ID',
+					'order'         => 'ASC',
+					'no_found_rows' => true,
+				)
+			);
+
+			// Advance offset for next run.
+			$new_offset = $offset + count( $batch );
+			update_option( 'seo_agent_ai_analysis_offset', $new_offset >= $total ? 0 : $new_offset, false );
+
+			// Dedup: skip posts already in the priority list.
+			foreach ( $batch as $p ) {
+				if ( ! in_array( (int) $p->ID, $seen_ids, true ) ) {
+					$round_robin_posts[] = $p;
+					$seen_ids[]          = (int) $p->ID;
+				}
+			}
 		}
 
-		$offset = (int) get_option( 'seo_agent_ai_analysis_offset', 0 );
-		if ( $offset >= $total ) {
-			$offset = 0;
-		}
-
-		$posts = get_posts(
-			array(
-				'post_type'     => $post_types,
-				'post_status'   => 'publish',
-				'numberposts'   => (int) $count,
-				'offset'        => $offset,
-				'orderby'       => 'ID',
-				'order'         => 'ASC',
-				'no_found_rows' => true,
-			)
-		);
-
-		// Advance offset; wrap to zero when we pass the end of the list.
-		$new_offset = $offset + count( $posts );
-		update_option( 'seo_agent_ai_analysis_offset', $new_offset >= $total ? 0 : $new_offset, false );
-
-		return $posts;
+		return array_merge( $priority_posts, $round_robin_posts );
 	}
 
 	// -------------------------------------------------------------------
@@ -1707,6 +1784,34 @@ class SEO_Agent_AI_Plugin {
 	}
 
 	// -------------------------------------------------------------------
+	// Cron: image alt text generation (daily, autopilot only)
+	// -------------------------------------------------------------------
+
+	/**
+	 * Daily cron: bulk-generate missing image alt text.
+	 * Only runs when autopilot is enabled so manual-review sites are unaffected.
+	 * Processes up to 20 images per run to stay within execution time limits.
+	 */
+	public function run_generate_image_alts() {
+		$autopilot = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
+		if ( ! $autopilot ) {
+			return;
+		}
+
+		$this->logger->info( 'Starting daily image alt text generation pass.' );
+		$result = $this->image_seo->bulk_generate_alt_text( 20 );
+		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_IMAGE_ALTS, current_time( 'mysql' ), false );
+		$this->logger->info(
+			sprintf(
+				'Image alt generation complete. processed=%d success=%d failed=%d',
+				(int) $result['processed'],
+				(int) $result['success'],
+				(int) $result['failed']
+			)
+		);
+	}
+
+	// -------------------------------------------------------------------
 	// Accessor methods for WP-CLI and admin pages
 	// -------------------------------------------------------------------
 
@@ -1742,4 +1847,8 @@ class SEO_Agent_AI_Plugin {
 		return $this->activity_log; }
 	public function get_bridge() {
 		return $this->bridge; }
+	public function get_gsc_opportunity_analyzer() {
+		return $this->gsc_opportunity_analyzer; }
+	public function get_image_seo() {
+		return $this->image_seo; }
 }

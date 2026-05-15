@@ -19,10 +19,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class SEO_Agent_AI_Gemini_Client {
 
-	const OPTION_API_KEY    = 'seo_agent_ai_gemini_api_key';
-	const API_ENDPOINT      = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-	const REQUEST_TIMEOUT   = 20;
-	const MAX_OUTPUT_TOKENS = 256;
+	const OPTION_API_KEY      = 'seo_agent_ai_gemini_api_key';
+	const API_ENDPOINT        = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+	const REQUEST_TIMEOUT     = 20;
+	const MAX_OUTPUT_TOKENS   = 256;
+	const IMAGE_SIZE_LIMIT    = 4194304; // 4 MB — Gemini inline_data hard limit.
 
 	// -----------------------------------------------------------------------
 	// Public API
@@ -48,10 +49,41 @@ class SEO_Agent_AI_Gemini_Client {
 			return new WP_Error( 'not_configured', __( 'Gemini API key not configured.', 'seo-agent-ai' ) );
 		}
 		$result = $this->generate( (string) $prompt );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 		if ( $result === null ) {
 			return new WP_Error( 'api_error', __( 'Gemini API returned no result.', 'seo-agent-ai' ) );
 		}
 		return $result;
+	}
+
+	/**
+	 * Send a prompt WITH an image for vision-based generation (e.g., alt text).
+	 *
+	 * Fetches the image, base64-encodes it as inline_data, and sends a multimodal
+	 * request. Falls back to text-only complete() if the image cannot be fetched
+	 * or exceeds the size limit.
+	 *
+	 * @param string $prompt     Text prompt to accompany the image.
+	 * @param string $image_url  Publicly accessible URL of the image attachment.
+	 * @return string|WP_Error
+	 */
+	public function complete_with_image( $prompt, $image_url ) {
+		if ( ! $this->is_configured() ) {
+			return new WP_Error( 'not_configured', __( 'Gemini API key not configured.', 'seo-agent-ai' ) );
+		}
+
+		$image_url = (string) $image_url;
+		if ( $image_url !== '' ) {
+			$result = $this->generate_vision( (string) $prompt, $image_url );
+			if ( ! is_wp_error( $result ) && $result !== null ) {
+				return $result;
+			}
+		}
+
+		// Fall back to text-only if vision is unavailable.
+		return $this->complete( $prompt );
 	}
 
 	/**
@@ -185,10 +217,11 @@ class SEO_Agent_AI_Gemini_Client {
 	// -----------------------------------------------------------------------
 
 	/**
-	 * Send a prompt to Gemini and return the text response, or null on error.
+	 * Send a prompt to Gemini and return the text response, WP_Error on API/auth
+	 * failure, or null when the response is empty (e.g. safety-filtered).
 	 *
 	 * @param string $prompt
-	 * @return string|null
+	 * @return string|WP_Error|null
 	 */
 	private function generate( $prompt ) {
 		$api_key = $this->get_api_key();
@@ -211,7 +244,7 @@ class SEO_Agent_AI_Gemini_Client {
 		);
 
 		if ( $body === false ) {
-			return null;
+			return new WP_Error( 'encode_error', __( 'Failed to encode Gemini request body.', 'seo-agent-ai' ) );
 		}
 
 		$response = wp_remote_post(
@@ -226,6 +259,131 @@ class SEO_Agent_AI_Gemini_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			return new WP_Error( 'http_error', $response->get_error_message() );
+		}
+
+		$code         = (int) wp_remote_retrieve_response_code( $response );
+		$response_body = wp_remote_retrieve_body( $response );
+		$data         = json_decode( $response_body, true );
+
+		if ( $code < 200 || $code >= 300 ) {
+			$api_msg = isset( $data['error']['message'] ) ? (string) $data['error']['message'] : "HTTP {$code}";
+			return new WP_Error( 'api_error', sprintf( 'Gemini API error %d: %s', $code, $api_msg ) );
+		}
+
+		// Safety filter: Gemini returns 200 but no content.
+		$finish_reason = isset( $data['candidates'][0]['finishReason'] )
+			? (string) $data['candidates'][0]['finishReason']
+			: '';
+
+		if ( in_array( $finish_reason, array( 'SAFETY', 'RECITATION', 'BLOCKLIST' ), true ) ) {
+			return new WP_Error(
+				'safety_filter',
+				sprintf(
+					/* translators: %s: Gemini finish reason code. */
+					__( 'Gemini blocked response (finishReason: %s).', 'seo-agent-ai' ),
+					$finish_reason
+				)
+			);
+		}
+
+		$text = isset( $data['candidates'][0]['content']['parts'][0]['text'] )
+			? (string) $data['candidates'][0]['content']['parts'][0]['text']
+			: '';
+
+		return $text !== '' ? $text : null;
+	}
+
+	/**
+	 * Send a prompt + image to Gemini Vision (inline_data) and return the text
+	 * response, or null if the image cannot be fetched / is too large / fails.
+	 *
+	 * @param string $prompt
+	 * @param string $image_url  Publicly accessible image URL.
+	 * @return string|null
+	 */
+	private function generate_vision( $prompt, $image_url ) {
+		// Fetch the image — hard cap at IMAGE_SIZE_LIMIT to avoid OOM.
+		$img_response = wp_remote_get(
+			$image_url,
+			array(
+				'timeout'    => 15,
+				'user-agent' => 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url(),
+			)
+		);
+
+		if ( is_wp_error( $img_response ) ) {
+			return null;
+		}
+
+		$img_code = (int) wp_remote_retrieve_response_code( $img_response );
+		if ( $img_code !== 200 ) {
+			return null;
+		}
+
+		$img_body = wp_remote_retrieve_body( $img_response );
+		if ( empty( $img_body ) || strlen( $img_body ) > self::IMAGE_SIZE_LIMIT ) {
+			return null;
+		}
+
+		// Detect MIME type from Content-Type header.
+		$ct        = wp_remote_retrieve_header( $img_response, 'content-type' );
+		$mime_type = $ct ? strtok( (string) $ct, ';' ) : 'image/jpeg';
+		$mime_type = trim( $mime_type );
+
+		$allowed_mimes = array( 'image/jpeg', 'image/png', 'image/webp', 'image/gif' );
+		if ( ! in_array( $mime_type, $allowed_mimes, true ) ) {
+			// Try to infer from URL extension.
+			$ext_map = array(
+				'jpg'  => 'image/jpeg',
+				'jpeg' => 'image/jpeg',
+				'png'  => 'image/png',
+				'webp' => 'image/webp',
+				'gif'  => 'image/gif',
+			);
+			$ext       = strtolower( pathinfo( wp_parse_url( $image_url, PHP_URL_PATH ), PATHINFO_EXTENSION ) );
+			$mime_type = $ext_map[ $ext ] ?? 'image/jpeg';
+		}
+
+		$api_key = $this->get_api_key();
+
+		$vision_body = wp_json_encode(
+			array(
+				'contents'         => array(
+					array(
+						'parts' => array(
+							array( 'text' => $prompt ),
+							array(
+								'inline_data' => array(
+									'mime_type' => $mime_type,
+									'data'      => base64_encode( $img_body ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+								),
+							),
+						),
+					),
+				),
+				'generationConfig' => array(
+					'maxOutputTokens' => self::MAX_OUTPUT_TOKENS,
+					'temperature'     => 0.4,
+					'topP'            => 0.9,
+				),
+			)
+		);
+
+		if ( $vision_body === false ) {
+			return null;
+		}
+
+		$response = wp_remote_post(
+			self::API_ENDPOINT . '?key=' . rawurlencode( $api_key ),
+			array(
+				'timeout' => self::REQUEST_TIMEOUT,
+				'headers' => array( 'Content-Type' => 'application/json' ),
+				'body'    => $vision_body,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
 			return null;
 		}
 
@@ -233,6 +391,14 @@ class SEO_Agent_AI_Gemini_Client {
 		$data = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( $code < 200 || $code >= 300 ) {
+			return null;
+		}
+
+		$finish_reason = isset( $data['candidates'][0]['finishReason'] )
+			? (string) $data['candidates'][0]['finishReason']
+			: '';
+
+		if ( in_array( $finish_reason, array( 'SAFETY', 'RECITATION', 'BLOCKLIST' ), true ) ) {
 			return null;
 		}
 
