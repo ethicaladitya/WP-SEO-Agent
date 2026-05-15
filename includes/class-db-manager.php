@@ -128,6 +128,9 @@ class SEO_Agent_AI_DB_Manager {
 			KEY status (status)
 		) $cc;" );
 
+		// Redirect manager tables.
+		SEO_Agent_AI_Redirect_Manager::create_table();
+
 		update_option( self::DB_VERSION_OPTION, self::DB_VERSION, false );
 	}
 

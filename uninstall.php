@@ -20,7 +20,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 ( function () {
 	global $wpdb;
 
-	// 1. Drop all custom tables (original + 5 new v3.0 tables).
+	// 1. Drop all custom tables (original + v3.0 tables + redirect/404 tables).
 	$seo_agent_ai_tables = array(
 		$wpdb->prefix . 'seo_agent_ai_activity',
 		$wpdb->prefix . 'seo_agent_keyword_history',
@@ -28,6 +28,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		$wpdb->prefix . 'seo_agent_ai_decisions',
 		$wpdb->prefix . 'seo_agent_daily_reports',
 		$wpdb->prefix . 'seo_agent_internal_links',
+		$wpdb->prefix . 'seo_agent_redirects',
+		$wpdb->prefix . 'seo_agent_404_log',
 	);
 	foreach ( $seo_agent_ai_tables as $seo_agent_ai_table ) {
 		$wpdb->query( "DROP TABLE IF EXISTS `{$seo_agent_ai_table}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared
@@ -73,6 +75,16 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_analysis_offset',
 		'seo_agent_ai_post_types',
 		'seo_agent_ai_db_manager_v',
+		// Social meta / webmaster verification.
+		'seo_agent_ai_google_verification',
+		'seo_agent_ai_bing_verification',
+		'seo_agent_ai_yandex_verification',
+		'seo_agent_ai_homepage_title',
+		'seo_agent_ai_homepage_description',
+		'seo_agent_ai_social_meta_enabled',
+		'seo_agent_ai_homepage_og_title',
+		'seo_agent_ai_homepage_og_description',
+		'seo_agent_ai_homepage_og_image',
 	);
 
 	foreach ( $seo_agent_ai_options as $seo_agent_ai_option ) {
@@ -88,6 +100,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_batch_state',
 		'seo_agent_ai_cron_checked',
 		'seo_agent_ai_site_opportunities',
+		'seo_agent_ai_redirect_list',
 	);
 	foreach ( $seo_agent_ai_transients as $seo_agent_ai_transient ) {
 		delete_transient( $seo_agent_ai_transient );
@@ -119,11 +132,28 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'_seo_agent_ai_meta_description',
 		'_seo_agent_ai_last_analyzed',
 		'_seo_agent_ai_score',
+		// Metabox fields.
+		'_seo_agent_ai_focus_keyword',
+		'_seo_agent_ai_custom_title',
+		'_seo_agent_ai_custom_description',
+		'_seo_agent_ai_canonical',
+		'_seo_agent_ai_robots_noindex',
+		'_seo_agent_ai_robots_nofollow',
+		'_seo_agent_ai_robots_noarchive',
+		'_seo_agent_ai_robots_nosnippet',
+		'_seo_agent_ai_og_title',
+		'_seo_agent_ai_og_description',
+		'_seo_agent_ai_og_image_id',
+		// Image SEO.
+		'_seo_agent_ai_alt_generated',
 	);
 
 	foreach ( $seo_agent_ai_meta_keys as $seo_agent_ai_meta_key ) {
 		delete_post_meta_by_key( $seo_agent_ai_meta_key );
 	}
+
+	// 4b. Wildcard term meta cleanup.
+	$wpdb->query( "DELETE FROM {$wpdb->termmeta} WHERE meta_key LIKE '_seo_agent_ai_%'" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
 	// 5. Unschedule all cron events.
 	$seo_agent_ai_cron_hooks = array(
@@ -138,6 +168,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_purge_old_data',
 		'seo_agent_detect_cannibalization',
 		'seo_agent_score_and_improve',
+		'seo_agent_detect_orphans',
 	);
 	foreach ( $seo_agent_ai_cron_hooks as $seo_agent_ai_hook ) {
 		wp_clear_scheduled_hook( $seo_agent_ai_hook );

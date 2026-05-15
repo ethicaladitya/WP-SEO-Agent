@@ -33,6 +33,7 @@ class SEO_Agent_AI_Plugin {
 	const CRON_HOOK_PURGE           = 'seo_agent_purge_old_data';
 	const CRON_HOOK_CANNIBAL        = 'seo_agent_detect_cannibalization';
 	const CRON_HOOK_IMPROVE         = 'seo_agent_score_and_improve';
+	const CRON_HOOK_ORPHAN          = 'seo_agent_detect_orphans';
 
 	private static $instance = null;
 
@@ -98,6 +99,21 @@ class SEO_Agent_AI_Plugin {
 
 	/** @var SEO_Agent_AI_Admin_Page */
 	private $admin_page;
+
+	/** @var SEO_Agent_AI_Image_SEO */
+	private $image_seo;
+
+	/** @var SEO_Agent_AI_Social_Meta */
+	private $social_meta;
+
+	/** @var SEO_Agent_AI_Meta_Box */
+	private $meta_box;
+
+	/** @var SEO_Agent_AI_Taxonomy_SEO */
+	private $taxonomy_seo;
+
+	/** @var SEO_Agent_AI_Redirect_Manager */
+	private $redirect_manager;
 
 	// -------------------------------------------------------------------
 	// Singleton
@@ -207,6 +223,22 @@ class SEO_Agent_AI_Plugin {
 		add_action( self::CRON_HOOK_CANNIBAL, array( $this, 'run_detect_cannibalization' ) );
 		add_action( self::CRON_HOOK_IMPROVE,  array( $this, 'run_improve_low_scoring_posts' ) );
 
+		// Cron hook — orphan detection.
+		add_action( self::CRON_HOOK_ORPHAN, array( $this, 'run_detect_orphans' ) );
+
+		// Feature modules.
+		$this->image_seo        = new SEO_Agent_AI_Image_SEO( $this->gemini, $this->openai, $this->logger );
+		$this->social_meta      = new SEO_Agent_AI_Social_Meta();
+		$this->meta_box         = new SEO_Agent_AI_Meta_Box();
+		$this->taxonomy_seo     = new SEO_Agent_AI_Taxonomy_SEO();
+		$this->redirect_manager = new SEO_Agent_AI_Redirect_Manager();
+
+		$this->image_seo->init_hooks();
+		$this->social_meta->init_hooks();
+		$this->meta_box->init_hooks();
+		$this->taxonomy_seo->init_hooks();
+		$this->redirect_manager->init_hooks();
+
 		// Defensive: re-add cron schedules on every load (guarded by transient).
 		add_action( 'init', array( $this, 'ensure_cron_schedules' ) );
 
@@ -243,6 +275,7 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_PURGE,
 			self::CRON_HOOK_CANNIBAL,
 			self::CRON_HOOK_IMPROVE,
+			self::CRON_HOOK_ORPHAN,
 		);
 		foreach ( $weekly_hooks as $hook ) {
 			if ( ! wp_next_scheduled( $hook ) ) {
@@ -266,6 +299,7 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_PURGE,
 			self::CRON_HOOK_CANNIBAL,
 			self::CRON_HOOK_IMPROVE,
+			self::CRON_HOOK_ORPHAN,
 		);
 		foreach ( $all_hooks as $hook ) {
 			wp_clear_scheduled_hook( $hook );
@@ -318,6 +352,9 @@ class SEO_Agent_AI_Plugin {
 		}
 		if ( ! wp_next_scheduled( self::CRON_HOOK_IMPROVE ) ) {
 			wp_schedule_event( time() + DAY_IN_SECONDS + 2 * HOUR_IN_SECONDS, 'weekly', self::CRON_HOOK_IMPROVE );
+		}
+		if ( ! wp_next_scheduled( self::CRON_HOOK_ORPHAN ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS + 3 * HOUR_IN_SECONDS, 'weekly', self::CRON_HOOK_ORPHAN );
 		}
 
 		set_transient( 'seo_agent_ai_cron_checked', 1, HOUR_IN_SECONDS );
@@ -1467,6 +1504,64 @@ class SEO_Agent_AI_Plugin {
 			'recommendations'     => $recommendations,
 			'title'               => $post->post_title,
 		);
+	}
+
+	// -------------------------------------------------------------------
+	// Cron: orphan detection
+	// -------------------------------------------------------------------
+
+	/**
+	 * Detect orphan pages — published posts with no inbound internal links.
+	 * Processes up to 100 posts per run to avoid slow-query timeouts.
+	 */
+	public function run_detect_orphans() {
+		global $wpdb;
+
+		$this->logger->info( 'Starting orphan page detection.' );
+
+		$posts    = $this->get_posts_for_analysis( 100 );
+		$orphans  = 0;
+		$checked  = 0;
+
+		foreach ( $posts as $post ) {
+			$permalink      = get_permalink( $post );
+			if ( ! $permalink ) {
+				continue;
+			}
+			$permalink_path = (string) wp_parse_url( $permalink, PHP_URL_PATH );
+			if ( ! $permalink_path ) {
+				continue;
+			}
+
+			// Count other published posts whose content contains a link to this post.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+			$link_count = (int) $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts}
+				 WHERE post_status = 'publish'
+				   AND ID != %d
+				   AND post_content LIKE %s",
+				$post->ID,
+				'%' . $wpdb->esc_like( $permalink_path ) . '%'
+			) );
+
+			$checked++;
+
+			if ( $link_count === 0 ) {
+				$orphans++;
+				$rec = array(
+					'type'        => 'internal_linking',
+					'field'       => 'content',
+					'confidence'  => 0.65,
+					'reasoning'   => __( 'This post has no inbound internal links (orphan page). Adding internal links from related posts will help search engines discover and rank it.', 'seo-agent-ai' ),
+					'risk_level'  => 'safe',
+				);
+
+				$this->decision_engine->process( (int) $post->ID, $rec, 0.65, false );
+			}
+		}
+
+		$this->logger->info( sprintf( 'Orphan detection complete. Checked: %d, Orphans found: %d', $checked, $orphans ) );
+		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_ORPHAN, current_time( 'mysql' ), false );
 	}
 
 	// -------------------------------------------------------------------

@@ -74,6 +74,13 @@ require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-rollback-center-pag
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-cron-status-page.php';
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/admin/class-admin-page.php';
 
+// Feature modules.
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-image-seo.php';
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-social-meta.php';
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-meta-box.php';
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-taxonomy-seo.php';
+require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-redirect-manager.php';
+
 // Plugin orchestrator.
 require_once SEO_AGENT_AI_PLUGIN_DIR . 'includes/class-plugin.php';
 
