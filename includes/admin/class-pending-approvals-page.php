@@ -31,6 +31,34 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 	}
 
 	/**
+	 * Apply all pending safe decisions at once (autopilot bulk action).
+	 */
+	public function handle_bulk_apply_safe() {
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'seo-agent-ai' ) );
+		}
+
+		check_admin_referer( 'seo_agent_ai_bulk_apply_safe' );
+
+		$safe_decisions = SEO_Agent_AI_DB_Manager::get_decisions(
+			array(
+				'status'     => SEO_Agent_AI_DB_Manager::STATUS_PENDING,
+				'risk_level' => 'safe',
+				'limit'      => 200,
+			)
+		);
+
+		foreach ( $safe_decisions as $dec ) {
+			$dec_id = (int) $dec['id'];
+			$this->decision_engine->approve( $dec_id );
+			$this->execute_decision( $dec_id );
+		}
+
+		wp_safe_redirect( admin_url( 'admin.php?page=seo-agent-opportunities&updated=1' ) );
+		exit;
+	}
+
+	/**
 	 * Handle approve/reject POST actions.
 	 * Called via admin_post_seo_agent_ai_decision_{action}.
 	 */
@@ -53,7 +81,9 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 			$this->decision_engine->reject( $decision_id );
 		}
 
-		wp_safe_redirect( admin_url( 'admin.php?page=seo-agent-approvals&updated=1' ) );
+		$redirect_to = sanitize_key( $_POST['redirect_to'] ?? '' );
+		$back_page   = ( $redirect_to !== '' ) ? $redirect_to : 'seo-agent-approvals';
+		wp_safe_redirect( admin_url( 'admin.php?page=' . $back_page . '&updated=1' ) );
 		exit;
 	}
 
@@ -64,6 +94,7 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 	private function execute_decision( $decision_id ) {
 		global $wpdb;
 		$table = $wpdb->prefix . 'seo_agent_ai_decisions';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$dec   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $decision_id ), ARRAY_A );
 
 		if ( ! $dec ) {
@@ -77,8 +108,8 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 			case 'meta_update':
 			case 'monitor_decline':
 				// Reconstruct recommendation from stored decision fields.
-				$field   = $dec['field'] ?? '';
-				$value   = $dec['proposed_value'] ?? '';
+				$field    = $dec['field'] ?? '';
+				$value    = $dec['proposed_value'] ?? '';
 				$proposed = array();
 				if ( $field === 'meta_title' ) {
 					$proposed['meta_title'] = $value;
@@ -149,19 +180,23 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 	}
 
 	private function render_decisions_list( $paged, $per_page ) {
-		$decisions = SEO_Agent_AI_DB_Manager::get_decisions( array(
-			'status' => SEO_Agent_AI_DB_Manager::STATUS_PENDING,
-			'limit'  => $per_page,
-			'offset' => ( $paged - 1 ) * $per_page,
-		) );
-		$total = SEO_Agent_AI_DB_Manager::count_decisions( SEO_Agent_AI_DB_Manager::STATUS_PENDING );
+		$decisions = SEO_Agent_AI_DB_Manager::get_decisions(
+			array(
+				'status' => SEO_Agent_AI_DB_Manager::STATUS_PENDING,
+				'limit'  => $per_page,
+				'offset' => ( $paged - 1 ) * $per_page,
+			)
+		);
+		$total     = SEO_Agent_AI_DB_Manager::count_decisions( SEO_Agent_AI_DB_Manager::STATUS_PENDING );
 
 		echo '<p class="description">';
-		echo esc_html( sprintf(
+		echo esc_html(
+			sprintf(
 			/* translators: %d: number of pending approvals. */
-			__( '%d decisions pending your review.', 'seo-agent-ai' ),
-			$total
-		) );
+				__( '%d decisions pending your review.', 'seo-agent-ai' ),
+				$total
+			)
+		);
 		echo '</p>';
 
 		if ( empty( $decisions ) ) {
@@ -200,12 +235,14 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 		$pages = (int) ceil( $total / $per_page );
 		if ( $pages > 1 ) {
 			echo '<div class="tablenav-pages">';
-			echo paginate_links( array(
-				'base'    => add_query_arg( 'paged', '%#%' ),
-				'format'  => '',
-				'current' => $paged,
-				'total'   => $pages,
-			) );
+			echo paginate_links( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				array(
+					'base'    => add_query_arg( 'paged', '%#%' ),
+					'format'  => '',
+					'current' => $paged,
+					'total'   => $pages,
+				)
+			);
 			echo '</div>';
 		}
 	}
@@ -213,6 +250,7 @@ class SEO_Agent_AI_Pending_Approvals_Page {
 	private function render_single_decision( $decision_id ) {
 		global $wpdb;
 		$table = $wpdb->prefix . 'seo_agent_ai_decisions';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$dec   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $decision_id ), ARRAY_A );
 
 		if ( ! $dec ) {

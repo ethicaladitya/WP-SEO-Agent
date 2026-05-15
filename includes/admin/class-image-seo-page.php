@@ -47,7 +47,7 @@ class SEO_Agent_AI_Image_SEO_Page {
 			<?php if ( $stats['missing_alt'] > 0 ) : ?>
 			<div style="margin-bottom:16px;">
 				<button id="seo-bulk-alt-btn" class="button button-primary">
-					<?php esc_html_e( 'Generate Alt Text for All Missing (up to 20)', 'seo-agent-ai' ); ?>
+					<?php esc_html_e( 'Generate Alt Text for All Missing', 'seo-agent-ai' ); ?>
 				</button>
 				<span id="seo-bulk-alt-status" style="margin-left:12px;color:#646970;"></span>
 			</div>
@@ -87,8 +87,7 @@ class SEO_Agent_AI_Image_SEO_Page {
 							<td><?php echo esc_html( $img['filesize_kb'] . ' KB' ); ?></td>
 							<td>
 								<button class="button seo-gen-alt-btn"
-									data-id="<?php echo esc_attr( $img['id'] ); ?>"
-									data-nonce="<?php echo esc_attr( wp_create_nonce( 'seo_agent_ai_generate_alt' ) ); ?>">
+									data-id="<?php echo esc_attr( $img['id'] ); ?>">
 									<?php esc_html_e( 'Generate Alt Text', 'seo-agent-ai' ); ?>
 								</button>
 								<span class="seo-alt-result" style="display:block;font-size:11px;color:#2271b1;margin-top:4px;"></span>
@@ -102,12 +101,9 @@ class SEO_Agent_AI_Image_SEO_Page {
 
 		<script>
 		(function($){
-			// Single image alt generation.
-			$(document).on('click', '.seo-gen-alt-btn', function(){
-				var btn    = $(this);
-				var id     = btn.data('id');
-				var nonce  = btn.data('nonce');
-				var result = btn.siblings('.seo-alt-result');
+			var nonce = '<?php echo esc_js( wp_create_nonce( 'seo_agent_ai_image_seo' ) ); ?>';
+
+			function generateAlt( id, btn, resultEl, onDone ) {
 				btn.prop('disabled', true).text('<?php echo esc_js( __( 'Generating…', 'seo-agent-ai' ) ); ?>');
 				$.post(ajaxurl, {
 					action: 'seo_agent_ai_generate_alt',
@@ -115,36 +111,60 @@ class SEO_Agent_AI_Image_SEO_Page {
 					nonce: nonce
 				}, function(res){
 					if ( res.success ) {
-						result.text(res.data.alt_text);
-						btn.closest('tr').fadeOut(1000, function(){ $(this).remove(); });
+						resultEl.text(res.data.alt_text);
+						btn.closest('tr').fadeOut(800, function(){ $(this).remove(); });
 					} else {
-						result.css('color','#d63638').text(res.data || '<?php echo esc_js( __( 'Error', 'seo-agent-ai' ) ); ?>');
+						resultEl.css('color','#d63638').text(res.data || '<?php echo esc_js( __( 'Error', 'seo-agent-ai' ) ); ?>');
 						btn.prop('disabled', false).text('<?php echo esc_js( __( 'Retry', 'seo-agent-ai' ) ); ?>');
 					}
+					if ( onDone ) { onDone( !! res.success ); }
+				}).fail(function(){
+					resultEl.css('color','#d63638').text('<?php echo esc_js( __( 'Request failed', 'seo-agent-ai' ) ); ?>');
+					btn.prop('disabled', false).text('<?php echo esc_js( __( 'Retry', 'seo-agent-ai' ) ); ?>');
+					if ( onDone ) { onDone(false); }
 				});
+			}
+
+			// Single image alt generation.
+			$(document).on('click', '.seo-gen-alt-btn', function(){
+				var btn = $(this);
+				generateAlt( btn.data('id'), btn, btn.siblings('.seo-alt-result') );
 			});
 
-			// Bulk generation.
+			// Bulk: process one image at a time so no request times out.
 			$('#seo-bulk-alt-btn').on('click', function(){
 				var btn    = $(this);
 				var status = $('#seo-bulk-alt-status');
+				var ids    = [];
+				$('.seo-gen-alt-btn:not([disabled])').each(function(){ ids.push($(this).data('id')); });
+				var total = ids.length, done = 0, success = 0;
+
+				if ( ! total ) { return; }
 				btn.prop('disabled', true);
-				status.text('<?php echo esc_js( __( 'Running bulk generation…', 'seo-agent-ai' ) ); ?>');
-				$.post(ajaxurl, {
-					action: 'seo_agent_ai_bulk_generate_alt',
-					nonce: '<?php echo esc_js( wp_create_nonce( 'seo_agent_ai_bulk_alt' ) ); ?>'
-				}, function(res){
-					btn.prop('disabled', false);
-					if ( res.success ) {
+
+				function next() {
+					if ( ! ids.length ) {
 						status.css('color','#00a32a').text(
-							'<?php echo esc_js( __( 'Done! Processed', 'seo-agent-ai' ) ); ?> ' +
-							res.data.processed + ', <?php echo esc_js( __( 'success', 'seo-agent-ai' ) ); ?>: ' + res.data.success
+							'<?php echo esc_js( __( 'Done!', 'seo-agent-ai' ) ); ?> ' +
+							success + ' / ' + total + ' <?php echo esc_js( __( 'generated', 'seo-agent-ai' ) ); ?>'
 						);
-						setTimeout(function(){ location.reload(); }, 2000);
-					} else {
-						status.css('color','#d63638').text(res.data || '<?php echo esc_js( __( 'Error', 'seo-agent-ai' ) ); ?>');
+						btn.prop('disabled', false);
+						return;
 					}
-				});
+					var id  = ids.shift();
+					var row = $('#seo-img-row-' + id);
+					var b   = row.find('.seo-gen-alt-btn');
+					var r   = row.find('.seo-alt-result');
+					done++;
+					status.css('color','#646970').text(
+						'<?php echo esc_js( __( 'Processing', 'seo-agent-ai' ) ); ?> ' + done + ' / ' + total + '…'
+					);
+					generateAlt( id, b, r, function(ok){
+						if ( ok ) { success++; }
+						next();
+					});
+				}
+				next();
 			});
 		}(jQuery));
 		</script>

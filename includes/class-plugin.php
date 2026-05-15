@@ -206,6 +206,7 @@ class SEO_Agent_AI_Plugin {
 
 		// New v3.0 admin-post handlers.
 		add_action( 'admin_post_seo_agent_ai_decision', array( $pending_approvals_page, 'handle_action' ) );
+		add_action( 'admin_post_seo_agent_ai_bulk_apply_safe', array( $pending_approvals_page, 'handle_bulk_apply_safe' ) );
 		add_action( 'admin_post_seo_agent_ai_rollback_new', array( $rollback_center_page, 'handle_rollback' ) );
 		add_action( 'admin_post_seo_agent_ai_trigger_cron', array( $cron_status_page, 'handle_trigger' ) );
 		add_action( 'admin_post_seo_agent_ai_manage_redirect', array( $redirects_page, 'handle_action' ) );
