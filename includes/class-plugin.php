@@ -31,6 +31,8 @@ class SEO_Agent_AI_Plugin {
 	const CRON_HOOK_DECAY           = 'seo_agent_detect_decay';
 	const CRON_HOOK_LINKS           = 'seo_agent_run_internal_links';
 	const CRON_HOOK_PURGE           = 'seo_agent_purge_old_data';
+	const CRON_HOOK_CANNIBAL        = 'seo_agent_detect_cannibalization';
+	const CRON_HOOK_IMPROVE         = 'seo_agent_score_and_improve';
 
 	private static $instance = null;
 
@@ -198,12 +200,14 @@ class SEO_Agent_AI_Plugin {
 		add_action( self::CRON_HOOK_REPORT, array( $this, 'run_generate_report' ) );
 
 		// Cron hooks — weekly.
-		add_action( self::CRON_HOOK_SCORE,  array( $this, 'run_score_pages' ) );
-		add_action( self::CRON_HOOK_DECAY,  array( $this, 'run_detect_decay' ) );
-		add_action( self::CRON_HOOK_LINKS,  array( $this, 'run_internal_links' ) );
-		add_action( self::CRON_HOOK_PURGE,  array( $this, 'run_purge_old_data' ) );
+		add_action( self::CRON_HOOK_SCORE,   array( $this, 'run_score_pages' ) );
+		add_action( self::CRON_HOOK_DECAY,   array( $this, 'run_detect_decay' ) );
+		add_action( self::CRON_HOOK_LINKS,   array( $this, 'run_internal_links' ) );
+		add_action( self::CRON_HOOK_PURGE,   array( $this, 'run_purge_old_data' ) );
+		add_action( self::CRON_HOOK_CANNIBAL, array( $this, 'run_detect_cannibalization' ) );
+		add_action( self::CRON_HOOK_IMPROVE,  array( $this, 'run_improve_low_scoring_posts' ) );
 
-		// Defensive: re-add cron schedules on every load.
+		// Defensive: re-add cron schedules on every load (guarded by transient).
 		add_action( 'init', array( $this, 'ensure_cron_schedules' ) );
 
 		// Persistent admin notice when GSC/GA4 fails repeatedly.
@@ -237,6 +241,8 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_DECAY,
 			self::CRON_HOOK_LINKS,
 			self::CRON_HOOK_PURGE,
+			self::CRON_HOOK_CANNIBAL,
+			self::CRON_HOOK_IMPROVE,
 		);
 		foreach ( $weekly_hooks as $hook ) {
 			if ( ! wp_next_scheduled( $hook ) ) {
@@ -258,6 +264,8 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_DECAY,
 			self::CRON_HOOK_LINKS,
 			self::CRON_HOOK_PURGE,
+			self::CRON_HOOK_CANNIBAL,
+			self::CRON_HOOK_IMPROVE,
 		);
 		foreach ( $all_hooks as $hook ) {
 			wp_clear_scheduled_hook( $hook );
@@ -272,7 +280,15 @@ class SEO_Agent_AI_Plugin {
 		SEO_Agent_AI_DB_Manager::maybe_upgrade();
 	}
 
+	/**
+	 * Ensure all cron events are scheduled.
+	 * Guarded by a 1-hour transient to avoid 9 DB queries on every page load.
+	 */
 	public function ensure_cron_schedules() {
+		if ( get_transient( 'seo_agent_ai_cron_checked' ) ) {
+			return;
+		}
+
 		if ( ! wp_next_scheduled( self::CRON_HOOK_DAILY ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK_DAILY );
 		}
@@ -297,6 +313,14 @@ class SEO_Agent_AI_Plugin {
 		if ( ! wp_next_scheduled( self::CRON_HOOK_PURGE ) ) {
 			wp_schedule_event( time() + DAY_IN_SECONDS, 'weekly', self::CRON_HOOK_PURGE );
 		}
+		if ( ! wp_next_scheduled( self::CRON_HOOK_CANNIBAL ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS, 'weekly', self::CRON_HOOK_CANNIBAL );
+		}
+		if ( ! wp_next_scheduled( self::CRON_HOOK_IMPROVE ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS + 2 * HOUR_IN_SECONDS, 'weekly', self::CRON_HOOK_IMPROVE );
+		}
+
+		set_transient( 'seo_agent_ai_cron_checked', 1, HOUR_IN_SECONDS );
 	}
 
 	// -------------------------------------------------------------------
@@ -305,8 +329,9 @@ class SEO_Agent_AI_Plugin {
 
 	public function run_fetch_gsc() {
 		$this->logger->info( 'Starting dedicated GSC keyword history fetch.' );
-		$posts = get_posts( array(
-			'post_type'   => 'post',
+		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
+		$posts      = get_posts( array(
+			'post_type'   => $post_types ?: array( 'post' ),
 			'post_status' => 'publish',
 			'numberposts' => 100,
 		) );
@@ -358,8 +383,9 @@ class SEO_Agent_AI_Plugin {
 
 	public function run_score_pages() {
 		$this->logger->info( 'Starting weekly SEO scoring pass.' );
-		$posts = get_posts( array(
-			'post_type'   => 'post',
+		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
+		$posts      = get_posts( array(
+			'post_type'   => $post_types ?: array( 'post' ),
 			'post_status' => 'publish',
 			'numberposts' => 200,
 		) );
@@ -368,7 +394,7 @@ class SEO_Agent_AI_Plugin {
 			$score_data = $this->scoring_engine->score( $post );
 			if ( is_array( $score_data ) ) {
 				SEO_Agent_AI_DB_Manager::upsert_page_insight( (int) $post->ID, $score_data );
-				update_post_meta( (int) $post->ID, '_seo_agent_ai_score', $score_data['score_overall'] ?? 0 );
+				update_post_meta( (int) $post->ID, '_seo_agent_ai_score', $score_data['overall'] ?? 0 );
 			}
 		}
 		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_SCORE, current_time( 'mysql' ), false );
@@ -377,30 +403,129 @@ class SEO_Agent_AI_Plugin {
 
 	public function run_detect_decay() {
 		$this->logger->info( 'Running content decay detection.' );
-		$posts = get_posts( array(
-			'post_type'   => 'post',
+		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
+		$posts      = get_posts( array(
+			'post_type'   => $post_types ?: array( 'post' ),
 			'post_status' => 'publish',
 			'numberposts' => 100,
 		) );
 
+		$flagged = 0;
 		foreach ( $posts as $post ) {
 			$content_data = $this->content_analyzer->analyze( $post );
-			if ( ! empty( $content_data['decay_signals'] ) ) {
-				$this->decision_engine->queue(
-					(int) $post->ID,
-					'content_refresh',
-					'content',
-					'',
-					'Refresh content — decay signals detected: ' . implode( ', ', $content_data['decay_signals'] ),
-					'Content may be outdated based on publish date and GSC signals.',
-					'Moderate traffic recovery possible.',
-					'medium',
-					0.60
+			if ( empty( $content_data['content_decay_risk'] ) ) {
+				continue;
+			}
+
+			$freshness  = isset( $content_data['freshness_score'] ) ? (float) $content_data['freshness_score'] : 0.5;
+			$confidence = round( max( 0.50, min( 0.80, 1.0 - $freshness ) ), 3 );
+
+			$rec = array(
+				'type'            => 'content_refresh',
+				'field'           => 'content',
+				'proposed_value'  => '',
+				'current_value'   => '',
+				'confidence'      => $confidence,
+				'reasoning'       => 'Content may be outdated based on publish date and stale year references.',
+				'expected_impact' => 'Moderate traffic recovery possible after a content refresh.',
+				'risk_level'      => 'safe',
+			);
+			$this->decision_engine->process( (int) $post->ID, $rec, 0.70, false );
+			$flagged++;
+		}
+
+		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_DECAY, current_time( 'mysql' ), false );
+		$this->logger->info( "Decay detection complete. Flagged: {$flagged}" );
+	}
+
+	/**
+	 * Weekly cannibalization check.
+	 * Reads keyword_history DB table (populated by run_fetch_gsc) — no live API calls.
+	 * Pages sharing a high-impression keyword are flagged via the decision engine.
+	 */
+	public function run_detect_cannibalization() {
+		global $wpdb;
+
+		$this->logger->info( 'Running cannibalization detection from keyword history.' );
+
+		$table = SEO_Agent_AI_DB_Manager::keyword_history_table();
+		$since = gmdate( 'Y-m-d', strtotime( '-28 days' ) );
+
+		// Aggregate impressions per (post_id, keyword) over the last 28 days.
+		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+			"SELECT post_id, keyword,
+			        SUM(impressions) AS total_impressions,
+			        AVG(position) AS avg_position
+			 FROM {$table}
+			 WHERE recorded_at >= %s AND impressions > 0
+			 GROUP BY post_id, keyword
+			 HAVING total_impressions >= 20
+			 ORDER BY keyword, total_impressions DESC",
+			$since
+		), ARRAY_A );
+
+		if ( empty( $rows ) ) {
+			$this->logger->info( 'No keyword history data for cannibalization check.' );
+			update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_CANNIBAL, current_time( 'mysql' ), false );
+			return;
+		}
+
+		// Build keyword → [ { post_id, impressions, position } ] map.
+		$kw_map = array();
+		foreach ( $rows as $row ) {
+			$kw = strtolower( trim( (string) $row['keyword'] ) );
+			if ( ! isset( $kw_map[ $kw ] ) ) {
+				$kw_map[ $kw ] = array();
+			}
+			$kw_map[ $kw ][] = array(
+				'post_id'     => (int) $row['post_id'],
+				'impressions' => (int) $row['total_impressions'],
+				'position'    => (float) $row['avg_position'],
+			);
+		}
+
+		$flagged = 0;
+		foreach ( $kw_map as $keyword => $pages ) {
+			if ( count( $pages ) < 2 ) {
+				continue;
+			}
+
+			// Sort: best-ranking page first (lowest position number = better).
+			usort( $pages, function( $a, $b ) {
+				return $a['position'] <=> $b['position'];
+			} );
+
+			$primary          = $pages[0];
+			$total_impressions = array_sum( array_column( $pages, 'impressions' ) );
+
+			// Flag each weaker competing page.
+			foreach ( array_slice( $pages, 1 ) as $competing ) {
+				$confidence = round( min( 0.85, 0.50 + ( $total_impressions / 5000 ) ), 3 );
+
+				$rec = array(
+					'type'            => 'cannibalization',
+					'field'           => 'content',
+					'proposed_value'  => '',
+					'current_value'   => '',
+					'confidence'      => $confidence,
+					'reasoning'       => sprintf(
+						/* translators: 1: keyword, 2: primary position, 3: competing position. */
+						__( 'Keyword “%1$s” ranks for multiple pages (positions %.1f vs %.1f). Consider differentiating or consolidating content.', 'seo-agent-ai' ),
+						esc_html( $keyword ),
+						$primary['position'],
+						$competing['position']
+					),
+					'expected_impact' => 'Reducing keyword cannibalization can improve ranking clarity and overall CTR.',
+					'risk_level'      => 'safe',
 				);
+
+				$this->decision_engine->process( (int) $competing['post_id'], $rec, 0.70, false );
+				$flagged++;
 			}
 		}
-		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_DECAY, current_time( 'mysql' ), false );
-		$this->logger->info( 'Decay detection complete.' );
+
+		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_CANNIBAL, current_time( 'mysql' ), false );
+		$this->logger->info( "Cannibalization detection complete. Flagged: {$flagged}" );
 	}
 
 	public function run_internal_links() {
@@ -418,6 +543,159 @@ class SEO_Agent_AI_Plugin {
 		$this->activity_log->purge_old_entries( $retention );
 		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_PURGE, current_time( 'mysql' ), false );
 		$this->logger->info( 'Data purge complete.' );
+	}
+
+	/**
+	 * Weekly cron: find posts scoring below the target threshold and generate
+	 * targeted improvements for the weakest SEO dimensions.
+	 *
+	 * The target threshold is configurable via the `seo_agent_ai_score_target`
+	 * option (default 70). Up to 30 lowest-scoring posts are processed per run.
+	 * Safe fixes are auto-applied when autopilot is on; everything else is
+	 * routed to the pending-approval queue.
+	 */
+	public function run_improve_low_scoring_posts() {
+		$this->logger->info( 'Starting score-targeted improvement pass.' );
+
+		$target    = max( 1, min( 100, (int) get_option( 'seo_agent_ai_score_target', 70 ) ) );
+		$autopilot = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
+		$post_ids  = SEO_Agent_AI_DB_Manager::get_posts_below_score_threshold( $target, 30 );
+
+		if ( empty( $post_ids ) ) {
+			$this->logger->info( 'Score improvement pass: no posts below threshold ' . $target . '.' );
+			update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_IMPROVE, current_time( 'mysql' ), false );
+			return;
+		}
+
+		$queued = 0;
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post instanceof WP_Post || $post->post_status !== 'publish' ) {
+				continue;
+			}
+
+			// Re-score to get fresh dimension data.
+			$score_data = $this->scoring_engine->score( $post );
+			if ( ! is_array( $score_data ) ) {
+				continue;
+			}
+
+			SEO_Agent_AI_DB_Manager::upsert_page_insight( $post_id, $score_data );
+			update_post_meta( $post_id, '_seo_agent_ai_score', $score_data['overall'] ?? 0 );
+
+			// Skip if the freshly-computed score already meets the target.
+			if ( ( $score_data['overall'] ?? 0 ) >= $target ) {
+				continue;
+			}
+
+			$this->generate_score_improvements( $post, $score_data, $autopilot );
+			$queued++;
+		}
+
+		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_IMPROVE, current_time( 'mysql' ), false );
+		$this->logger->info( sprintf(
+			'Score improvement pass complete. Checked: %d, queued improvements for: %d (target ≥ %d).',
+			count( $post_ids ),
+			$queued,
+			$target
+		) );
+	}
+
+	/**
+	 * Generate, persist, and route improvement recommendations for a single
+	 * low-scoring post. Prioritises the weakest scoring dimensions.
+	 *
+	 * @param WP_Post $post
+	 * @param array   $score_data  ScoringEngine output (overall, dimensions, signals, improvements).
+	 * @param bool    $autopilot   Whether autopilot mode is active.
+	 */
+	private function generate_score_improvements( WP_Post $post, array $score_data, $autopilot ) {
+		$overall    = (int) ( $score_data['overall'] ?? 0 );
+		$dimensions = is_array( $score_data['dimensions'] ?? null ) ? $score_data['dimensions'] : array();
+		$target     = max( 1, min( 100, (int) get_option( 'seo_agent_ai_score_target', 70 ) ) );
+		$url        = get_permalink( $post );
+
+		// Reuse already-cached API data (populated by daily GSC/GA4 cron jobs).
+		$gsc_metrics = $url ? $this->gsc_client->get_page_metrics( $url ) : array();
+		$ga4_metrics = $url ? $this->ga4_client->get_page_metrics( $url ) : array();
+		$gsc_safe    = is_wp_error( $gsc_metrics ) ? array() : (array) $gsc_metrics;
+		$ga4_safe    = is_wp_error( $ga4_metrics ) ? array() : (array) $ga4_metrics;
+
+		$seo_audit   = $this->bridge->audit_post( (int) $post->ID, $post );
+		$analysis    = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
+		$min_conf    = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
+
+		$recommendations = $this->recommendation_engine->generate(
+			$post, $analysis, $gsc_safe, $ga4_safe, $seo_audit, $min_conf, false
+		);
+
+		if ( empty( $recommendations ) ) {
+			return;
+		}
+
+		// Sort recommendations: weakest dimensions first so the most impactful
+		// fixes are processed first within the daily autopilot budget.
+		$dim_scores = array();
+		foreach ( $dimensions as $dim => $dim_score ) {
+			$dim_scores[ $dim ] = (int) $dim_score;
+		}
+		asort( $dim_scores );
+		$weakest_dims = array_keys( $dim_scores );
+
+		usort( $recommendations, function( $a, $b ) use ( $weakest_dims ) {
+			$a_idx = array_search( $a['field'] ?? '', $weakest_dims, true );
+			$b_idx = array_search( $b['field'] ?? '', $weakest_dims, true );
+			$a_idx = $a_idx === false ? PHP_INT_MAX : $a_idx;
+			$b_idx = $b_idx === false ? PHP_INT_MAX : $b_idx;
+			return $a_idx <=> $b_idx;
+		} );
+
+		$this->data_store->save_recommendations( (int) $post->ID, $recommendations );
+
+		$signal_data = array(
+			'signals'      => $analysis['signals'] ?? array(),
+			'evidence'     => $analysis['evidence'] ?? array(),
+			'score_before' => $overall,
+			'score_target' => $target,
+		);
+
+		foreach ( $recommendations as $rec ) {
+			$risk       = $rec['risk'] ?? 'risky';
+			$confidence = (float) ( $rec['confidence'] ?? 0.0 );
+			$reasoning  = $rec['reasoning'] ?? sprintf(
+				/* translators: 1: current score, 2: target score, 3: dimension name. */
+				__( 'Score %1$d → target %2$d: improve %3$s dimension.', 'seo-agent-ai' ),
+				$overall,
+				$target,
+				$rec['field'] ?? 'unknown'
+			);
+
+			$decision_rec = array(
+				'type'            => $rec['type'] ?? 'score_improvement',
+				'field'           => $rec['field'] ?? '',
+				'proposed_value'  => $rec['proposed_value'] ?? '',
+				'current_value'   => $rec['current_value'] ?? '',
+				'confidence'      => $confidence,
+				'reasoning'       => $reasoning,
+				'expected_impact' => $rec['expected_impact'] ?? __( 'Score improvement.', 'seo-agent-ai' ),
+				'risk_level'      => $risk,
+			);
+
+			if ( $autopilot && $risk === 'safe' && $confidence >= $min_conf ) {
+				$result = $this->fix_executor->apply(
+					(int) $post->ID,
+					$rec,
+					SEO_Agent_AI_Activity_Log::TRIGGER_AUTOPILOT,
+					$signal_data
+				);
+				if ( ! is_wp_error( $result ) && ! empty( $rec['decision_id'] ) ) {
+					$this->decision_engine->mark_applied( (int) $rec['decision_id'] );
+				}
+			} else {
+				// Route to pending-approval queue (risky, low-confidence, or autopilot off).
+				$this->decision_engine->process( (int) $post->ID, $decision_rec, $min_conf, false );
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------
@@ -455,13 +733,7 @@ class SEO_Agent_AI_Plugin {
 		$log_retention = (int) get_option( 'seo_agent_ai_log_retention_days', 90 );
 
 		try {
-			$posts = get_posts( array(
-				'post_type'   => 'post',
-				'post_status' => 'publish',
-				'numberposts' => 50,
-				'orderby'     => 'modified',
-				'order'       => 'DESC',
-			) );
+			$posts = $this->get_posts_for_analysis( 50 );
 
 			foreach ( $posts as $post ) {
 				$processed++;
@@ -559,6 +831,56 @@ class SEO_Agent_AI_Plugin {
 	}
 
 	// -------------------------------------------------------------------
+	// Post selection: round-robin across configured post types
+	// -------------------------------------------------------------------
+
+	/**
+	 * Return $count posts using a persistent offset so every run covers
+	 * a different slice. Wraps around when the end of the list is reached.
+	 *
+	 * @param int $count
+	 * @return WP_Post[]
+	 */
+	private function get_posts_for_analysis( $count = 50 ) {
+		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
+		if ( empty( $post_types ) ) {
+			$post_types = array( 'post' );
+		}
+
+		// Count total published posts across all configured post types.
+		$total = 0;
+		foreach ( $post_types as $pt ) {
+			$counts = wp_count_posts( $pt );
+			$total += isset( $counts->publish ) ? (int) $counts->publish : 0;
+		}
+
+		if ( $total === 0 ) {
+			return array();
+		}
+
+		$offset = (int) get_option( 'seo_agent_ai_analysis_offset', 0 );
+		if ( $offset >= $total ) {
+			$offset = 0;
+		}
+
+		$posts = get_posts( array(
+			'post_type'     => $post_types,
+			'post_status'   => 'publish',
+			'numberposts'   => (int) $count,
+			'offset'        => $offset,
+			'orderby'       => 'ID',
+			'order'         => 'ASC',
+			'no_found_rows' => true,
+		) );
+
+		// Advance offset; wrap to zero when we pass the end of the list.
+		$new_offset = $offset + count( $posts );
+		update_option( 'seo_agent_ai_analysis_offset', $new_offset >= $total ? 0 : $new_offset, false );
+
+		return $posts;
+	}
+
+	// -------------------------------------------------------------------
 	// AJAX: interactive batch analysis
 	// -------------------------------------------------------------------
 
@@ -578,10 +900,12 @@ class SEO_Agent_AI_Plugin {
 		$batch_size = 5;
 		$autopilot  = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
 
+		// For AJAX batch we get a consistent snapshot of posts for the session.
+		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
 		$posts = get_posts( array(
-			'post_type'   => 'post',
+			'post_type'   => $post_types ?: array( 'post' ),
 			'post_status' => 'publish',
-			'numberposts' => 50,
+			'numberposts' => 200,
 			'orderby'     => 'modified',
 			'order'       => 'DESC',
 		) );
@@ -1146,70 +1470,23 @@ class SEO_Agent_AI_Plugin {
 	}
 
 	// -------------------------------------------------------------------
-	// Accessor methods for WP-CLI
+	// Accessor methods for WP-CLI and admin pages
 	// -------------------------------------------------------------------
 
-	public function get_gsc_client() {
-		return $this->gsc_client;
-	}
-
-	public function get_ga4_client() {
-		return $this->ga4_client;
-	}
-
-	public function get_analyzer() {
-		return $this->analyzer;
-	}
-
-	public function get_recommendation_engine() {
-		return $this->recommendation_engine;
-	}
-
-	public function get_fix_executor() {
-		return $this->fix_executor;
-	}
-
-	public function get_scoring_engine() {
-		return $this->scoring_engine;
-	}
-
-	public function get_decision_engine() {
-		return $this->decision_engine;
-	}
-
-	public function get_report_engine() {
-		return $this->report_engine;
-	}
-
-	public function get_queue_manager() {
-		return $this->queue_manager;
-	}
-
-	public function get_logger() {
-		return $this->logger;
-	}
-
-	public function get_oauth() {
-		return $this->oauth;
-	}
-
-	public function get_gemini() {
-		return $this->gemini;
-	}
-
-	public function get_openai() {
-		return $this->openai;
-	}
-
-	public function get_data_store() {
-		return $this->data_store;
-	}
-
-	public function get_activity_log() {
-		return $this->activity_log;
-	}
-
-	public function get_bridge() {
-		return $this->bridge;
-	}
+	public function get_gsc_client() { return $this->gsc_client; }
+	public function get_ga4_client() { return $this->ga4_client; }
+	public function get_analyzer() { return $this->analyzer; }
+	public function get_recommendation_engine() { return $this->recommendation_engine; }
+	public function get_fix_executor() { return $this->fix_executor; }
+	public function get_scoring_engine() { return $this->scoring_engine; }
+	public function get_decision_engine() { return $this->decision_engine; }
+	public function get_report_engine() { return $this->report_engine; }
+	public function get_queue_manager() { return $this->queue_manager; }
+	public function get_logger() { return $this->logger; }
+	public function get_oauth() { return $this->oauth; }
+	public function get_gemini() { return $this->gemini; }
+	public function get_openai() { return $this->openai; }
+	public function get_data_store() { return $this->data_store; }
+	public function get_activity_log() { return $this->activity_log; }
+	public function get_bridge() { return $this->bridge; }
 }

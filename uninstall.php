@@ -56,6 +56,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_autopilot_min_confidence',
 		'seo_agent_ai_log_retention_days',
 		'seo_agent_ai_email_reports',
+		// Score improvement target.
+		'seo_agent_ai_score_target',
 		// Debug / mode.
 		'seo_agent_ai_debug_mode',
 		'seo_agent_ai_verbose_mode',
@@ -67,6 +69,10 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_last_api_error',
 		'seo_agent_ai_auth_health',
 		'seo_agent_ai_queue',
+		// Analysis rotation.
+		'seo_agent_ai_analysis_offset',
+		'seo_agent_ai_post_types',
+		'seo_agent_ai_db_manager_v',
 	);
 
 	foreach ( $seo_agent_ai_options as $seo_agent_ai_option ) {
@@ -80,20 +86,26 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_ai_analysis_lock',
 		'seo_agent_ai_connection_test_result',
 		'seo_agent_ai_batch_state',
+		'seo_agent_ai_cron_checked',
+		'seo_agent_ai_site_opportunities',
 	);
 	foreach ( $seo_agent_ai_transients as $seo_agent_ai_transient ) {
 		delete_transient( $seo_agent_ai_transient );
 		delete_site_transient( $seo_agent_ai_transient );
 	}
 
-	// 3b. Daily autopilot counters + cron last-run options use date suffixes; sweep them.
+	// 3b. Sweep date-suffixed transients and last-run options + feature flags + API page caches.
 	$wpdb->query(
 		$wpdb->prepare(
-			"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s",
+			"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s",
 			$wpdb->esc_like( '_transient_seo_agent_ai_ap_count_' ) . '%',
 			$wpdb->esc_like( '_transient_timeout_seo_agent_ai_ap_count_' ) . '%',
 			$wpdb->esc_like( 'seo_agent_ai_last_run_' ) . '%',
-			$wpdb->esc_like( '_transient_seo_agent_schema_' ) . '%'
+			$wpdb->esc_like( '_transient_seo_agent_schema_' ) . '%',
+			$wpdb->esc_like( 'seo_agent_ai_flag_' ) . '%',
+			$wpdb->esc_like( '_transient_seo_agent_gsc_page_' ) . '%',
+			$wpdb->esc_like( '_transient_seo_agent_ga4_page_' ) . '%',
+			$wpdb->esc_like( '_transient_timeout_seo_agent_' ) . '%'
 		)
 	); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 
@@ -124,6 +136,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		'seo_agent_detect_decay',
 		'seo_agent_run_internal_links',
 		'seo_agent_purge_old_data',
+		'seo_agent_detect_cannibalization',
+		'seo_agent_score_and_improve',
 	);
 	foreach ( $seo_agent_ai_cron_hooks as $seo_agent_ai_hook ) {
 		wp_clear_scheduled_hook( $seo_agent_ai_hook );
