@@ -32,6 +32,7 @@ class SEO_Agent_AI_Plugin {
 	const CRON_HOOK_LINKS           = 'seo_agent_run_internal_links';
 	const CRON_HOOK_PURGE           = 'seo_agent_purge_old_data';
 	const CRON_HOOK_CANNIBAL        = 'seo_agent_detect_cannibalization';
+	const CRON_HOOK_IMPROVE         = 'seo_agent_score_and_improve';
 
 	private static $instance = null;
 
@@ -204,6 +205,7 @@ class SEO_Agent_AI_Plugin {
 		add_action( self::CRON_HOOK_LINKS,   array( $this, 'run_internal_links' ) );
 		add_action( self::CRON_HOOK_PURGE,   array( $this, 'run_purge_old_data' ) );
 		add_action( self::CRON_HOOK_CANNIBAL, array( $this, 'run_detect_cannibalization' ) );
+		add_action( self::CRON_HOOK_IMPROVE,  array( $this, 'run_improve_low_scoring_posts' ) );
 
 		// Defensive: re-add cron schedules on every load (guarded by transient).
 		add_action( 'init', array( $this, 'ensure_cron_schedules' ) );
@@ -240,6 +242,7 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_LINKS,
 			self::CRON_HOOK_PURGE,
 			self::CRON_HOOK_CANNIBAL,
+			self::CRON_HOOK_IMPROVE,
 		);
 		foreach ( $weekly_hooks as $hook ) {
 			if ( ! wp_next_scheduled( $hook ) ) {
@@ -262,6 +265,7 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_LINKS,
 			self::CRON_HOOK_PURGE,
 			self::CRON_HOOK_CANNIBAL,
+			self::CRON_HOOK_IMPROVE,
 		);
 		foreach ( $all_hooks as $hook ) {
 			wp_clear_scheduled_hook( $hook );
@@ -311,6 +315,9 @@ class SEO_Agent_AI_Plugin {
 		}
 		if ( ! wp_next_scheduled( self::CRON_HOOK_CANNIBAL ) ) {
 			wp_schedule_event( time() + DAY_IN_SECONDS, 'weekly', self::CRON_HOOK_CANNIBAL );
+		}
+		if ( ! wp_next_scheduled( self::CRON_HOOK_IMPROVE ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS + 2 * HOUR_IN_SECONDS, 'weekly', self::CRON_HOOK_IMPROVE );
 		}
 
 		set_transient( 'seo_agent_ai_cron_checked', 1, HOUR_IN_SECONDS );
@@ -536,6 +543,159 @@ class SEO_Agent_AI_Plugin {
 		$this->activity_log->purge_old_entries( $retention );
 		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_PURGE, current_time( 'mysql' ), false );
 		$this->logger->info( 'Data purge complete.' );
+	}
+
+	/**
+	 * Weekly cron: find posts scoring below the target threshold and generate
+	 * targeted improvements for the weakest SEO dimensions.
+	 *
+	 * The target threshold is configurable via the `seo_agent_ai_score_target`
+	 * option (default 70). Up to 30 lowest-scoring posts are processed per run.
+	 * Safe fixes are auto-applied when autopilot is on; everything else is
+	 * routed to the pending-approval queue.
+	 */
+	public function run_improve_low_scoring_posts() {
+		$this->logger->info( 'Starting score-targeted improvement pass.' );
+
+		$target    = max( 1, min( 100, (int) get_option( 'seo_agent_ai_score_target', 70 ) ) );
+		$autopilot = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
+		$post_ids  = SEO_Agent_AI_DB_Manager::get_posts_below_score_threshold( $target, 30 );
+
+		if ( empty( $post_ids ) ) {
+			$this->logger->info( 'Score improvement pass: no posts below threshold ' . $target . '.' );
+			update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_IMPROVE, current_time( 'mysql' ), false );
+			return;
+		}
+
+		$queued = 0;
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post instanceof WP_Post || $post->post_status !== 'publish' ) {
+				continue;
+			}
+
+			// Re-score to get fresh dimension data.
+			$score_data = $this->scoring_engine->score( $post );
+			if ( ! is_array( $score_data ) ) {
+				continue;
+			}
+
+			SEO_Agent_AI_DB_Manager::upsert_page_insight( $post_id, $score_data );
+			update_post_meta( $post_id, '_seo_agent_ai_score', $score_data['overall'] ?? 0 );
+
+			// Skip if the freshly-computed score already meets the target.
+			if ( ( $score_data['overall'] ?? 0 ) >= $target ) {
+				continue;
+			}
+
+			$this->generate_score_improvements( $post, $score_data, $autopilot );
+			$queued++;
+		}
+
+		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_IMPROVE, current_time( 'mysql' ), false );
+		$this->logger->info( sprintf(
+			'Score improvement pass complete. Checked: %d, queued improvements for: %d (target ≥ %d).',
+			count( $post_ids ),
+			$queued,
+			$target
+		) );
+	}
+
+	/**
+	 * Generate, persist, and route improvement recommendations for a single
+	 * low-scoring post. Prioritises the weakest scoring dimensions.
+	 *
+	 * @param WP_Post $post
+	 * @param array   $score_data  ScoringEngine output (overall, dimensions, signals, improvements).
+	 * @param bool    $autopilot   Whether autopilot mode is active.
+	 */
+	private function generate_score_improvements( WP_Post $post, array $score_data, $autopilot ) {
+		$overall    = (int) ( $score_data['overall'] ?? 0 );
+		$dimensions = is_array( $score_data['dimensions'] ?? null ) ? $score_data['dimensions'] : array();
+		$target     = max( 1, min( 100, (int) get_option( 'seo_agent_ai_score_target', 70 ) ) );
+		$url        = get_permalink( $post );
+
+		// Reuse already-cached API data (populated by daily GSC/GA4 cron jobs).
+		$gsc_metrics = $url ? $this->gsc_client->get_page_metrics( $url ) : array();
+		$ga4_metrics = $url ? $this->ga4_client->get_page_metrics( $url ) : array();
+		$gsc_safe    = is_wp_error( $gsc_metrics ) ? array() : (array) $gsc_metrics;
+		$ga4_safe    = is_wp_error( $ga4_metrics ) ? array() : (array) $ga4_metrics;
+
+		$seo_audit   = $this->bridge->audit_post( (int) $post->ID, $post );
+		$analysis    = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
+		$min_conf    = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
+
+		$recommendations = $this->recommendation_engine->generate(
+			$post, $analysis, $gsc_safe, $ga4_safe, $seo_audit, $min_conf, false
+		);
+
+		if ( empty( $recommendations ) ) {
+			return;
+		}
+
+		// Sort recommendations: weakest dimensions first so the most impactful
+		// fixes are processed first within the daily autopilot budget.
+		$dim_scores = array();
+		foreach ( $dimensions as $dim => $dim_score ) {
+			$dim_scores[ $dim ] = (int) $dim_score;
+		}
+		asort( $dim_scores );
+		$weakest_dims = array_keys( $dim_scores );
+
+		usort( $recommendations, function( $a, $b ) use ( $weakest_dims ) {
+			$a_idx = array_search( $a['field'] ?? '', $weakest_dims, true );
+			$b_idx = array_search( $b['field'] ?? '', $weakest_dims, true );
+			$a_idx = $a_idx === false ? PHP_INT_MAX : $a_idx;
+			$b_idx = $b_idx === false ? PHP_INT_MAX : $b_idx;
+			return $a_idx <=> $b_idx;
+		} );
+
+		$this->data_store->save_recommendations( (int) $post->ID, $recommendations );
+
+		$signal_data = array(
+			'signals'      => $analysis['signals'] ?? array(),
+			'evidence'     => $analysis['evidence'] ?? array(),
+			'score_before' => $overall,
+			'score_target' => $target,
+		);
+
+		foreach ( $recommendations as $rec ) {
+			$risk       = $rec['risk'] ?? 'risky';
+			$confidence = (float) ( $rec['confidence'] ?? 0.0 );
+			$reasoning  = $rec['reasoning'] ?? sprintf(
+				/* translators: 1: current score, 2: target score, 3: dimension name. */
+				__( 'Score %1$d → target %2$d: improve %3$s dimension.', 'seo-agent-ai' ),
+				$overall,
+				$target,
+				$rec['field'] ?? 'unknown'
+			);
+
+			$decision_rec = array(
+				'type'            => $rec['type'] ?? 'score_improvement',
+				'field'           => $rec['field'] ?? '',
+				'proposed_value'  => $rec['proposed_value'] ?? '',
+				'current_value'   => $rec['current_value'] ?? '',
+				'confidence'      => $confidence,
+				'reasoning'       => $reasoning,
+				'expected_impact' => $rec['expected_impact'] ?? __( 'Score improvement.', 'seo-agent-ai' ),
+				'risk_level'      => $risk,
+			);
+
+			if ( $autopilot && $risk === 'safe' && $confidence >= $min_conf ) {
+				$result = $this->fix_executor->apply(
+					(int) $post->ID,
+					$rec,
+					SEO_Agent_AI_Activity_Log::TRIGGER_AUTOPILOT,
+					$signal_data
+				);
+				if ( ! is_wp_error( $result ) && ! empty( $rec['decision_id'] ) ) {
+					$this->decision_engine->mark_applied( (int) $rec['decision_id'] );
+				}
+			} else {
+				// Route to pending-approval queue (risky, low-confidence, or autopilot off).
+				$this->decision_engine->process( (int) $post->ID, $decision_rec, $min_conf, false );
+			}
+		}
 	}
 
 	// -------------------------------------------------------------------
