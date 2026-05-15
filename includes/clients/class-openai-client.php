@@ -115,10 +115,49 @@ class SEO_Agent_AI_OpenAI_Client {
 			return new WP_Error( 'not_configured', __( 'OpenAI API key not configured.', 'seo-agent-ai' ) );
 		}
 		$result = $this->chat( (string) $prompt );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 		if ( $result === null ) {
 			return new WP_Error( 'api_error', __( 'OpenAI API returned no result.', 'seo-agent-ai' ) );
 		}
 		return $result;
+	}
+
+	/**
+	 * Send a prompt WITH an image URL for vision-based generation (e.g., alt text).
+	 *
+	 * Uses the configured model if it supports vision, otherwise upgrades to
+	 * gpt-4o-mini which is the cheapest OpenAI model with vision capability.
+	 * Falls back to text-only complete() if vision fails.
+	 *
+	 * Only used for standard OpenAI and Azure /openai/v1 endpoints — Azure legacy
+	 * deployments are not guaranteed to support vision inputs.
+	 *
+	 * @param string $prompt     Text prompt to accompany the image.
+	 * @param string $image_url  Publicly accessible URL of the image attachment.
+	 * @return string|WP_Error
+	 */
+	public function complete_with_image( $prompt, $image_url ) {
+		if ( ! $this->is_configured() ) {
+			return new WP_Error( 'not_configured', __( 'OpenAI API key not configured.', 'seo-agent-ai' ) );
+		}
+
+		$image_url = (string) $image_url;
+
+		// Vision is only reliable on standard OpenAI and Azure /openai/v1 endpoints.
+		// For Azure legacy deployments (deployment-specific URLs) skip vision.
+		$can_use_vision = ! ( $this->is_azure && ! $this->is_azure_v1 ) && ! $this->is_azure_foundry;
+
+		if ( $image_url !== '' && $can_use_vision ) {
+			$result = $this->chat_with_image( (string) $prompt, $image_url );
+			if ( ! is_wp_error( $result ) && $result !== null ) {
+				return $result;
+			}
+		}
+
+		// Fall back to text-only.
+		return $this->complete( $prompt );
 	}
 
 	/**
@@ -219,7 +258,7 @@ class SEO_Agent_AI_OpenAI_Client {
 			. "Content excerpt: {$excerpt}";
 
 		$result = $this->chat( $prompt, 500 );
-		return $this->parse_faq_output( (string) $result );
+		return $this->parse_faq_output( is_string( $result ) ? $result : '' );
 	}
 
 	/**
@@ -252,11 +291,11 @@ class SEO_Agent_AI_OpenAI_Client {
 	// -------------------------------------------------------------------
 
 	/**
-	 * Send a chat completion request.
+	 * Send a chat completion request (text-only).
 	 *
-	 * @param string $user_prompt
-	 * @param int    $max_tokens Override default max tokens.
-	 * @return string|null Response text or null on failure.
+	 * @param string   $user_prompt
+	 * @param int|null $max_tokens  Override default max tokens.
+	 * @return string|WP_Error|null Response text, WP_Error on API/HTTP failure, or null when response is empty.
 	 */
 	private function chat( $user_prompt, $max_tokens = null ) {
 		$endpoint = $this->build_endpoint();
@@ -288,10 +327,97 @@ class SEO_Agent_AI_OpenAI_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			return new WP_Error( 'http_error', $response->get_error_message() );
+		}
+
+		$code          = (int) wp_remote_retrieve_response_code( $response );
+		$response_body = wp_remote_retrieve_body( $response );
+		$data          = json_decode( $response_body, true );
+
+		if ( $code !== 200 ) {
+			$api_msg = isset( $data['error']['message'] ) ? (string) $data['error']['message'] : "HTTP {$code}";
+			return new WP_Error( 'api_error', sprintf( 'OpenAI API error %d: %s', $code, $api_msg ) );
+		}
+
+		return $data['choices'][0]['message']['content'] ?? null;
+	}
+
+	/**
+	 * Send a chat completion request with an image URL (vision).
+	 *
+	 * Uses 'detail: low' for images — sufficient for alt text and avoids extra
+	 * token cost from high-resolution analysis.
+	 *
+	 * If the configured model does not support vision, upgrades to gpt-4o-mini.
+	 *
+	 * @param string $user_prompt
+	 * @param string $image_url  Publicly accessible image URL.
+	 * @return string|null Response text or null on failure.
+	 */
+	private function chat_with_image( $user_prompt, $image_url ) {
+		$endpoint = $this->build_endpoint();
+		$headers  = $this->build_headers();
+
+		// Determine a vision-capable model.
+		$vision_capable = array( 'gpt-4o', 'gpt-4-turbo', 'gpt-4-vision' );
+		$model          = $this->model;
+		$is_vision      = false;
+		foreach ( $vision_capable as $vm ) {
+			if ( strpos( $model, $vm ) !== false ) {
+				$is_vision = true;
+				break;
+			}
+		}
+		// gpt-4o-mini also supports vision.
+		if ( ! $is_vision && strpos( $model, 'gpt-4o-mini' ) !== false ) {
+			$is_vision = true;
+		}
+		if ( ! $is_vision ) {
+			$model = 'gpt-4o-mini';
+		}
+
+		$body = array(
+			'model'       => $model,
+			'messages'    => array(
+				array(
+					'role'    => 'system',
+					'content' => 'You are an expert SEO copywriter. Follow instructions precisely.',
+				),
+				array(
+					'role'    => 'user',
+					'content' => array(
+						array(
+							'type' => 'text',
+							'text' => $user_prompt,
+						),
+						array(
+							'type'      => 'image_url',
+							'image_url' => array(
+								'url'    => $image_url,
+								'detail' => 'low',
+							),
+						),
+					),
+				),
+			),
+			'max_tokens'  => self::MAX_TOKENS,
+			'temperature' => self::TEMPERATURE,
+		);
+
+		$response = wp_remote_post(
+			$endpoint,
+			array(
+				'headers' => $headers,
+				'body'    => wp_json_encode( $body ),
+				'timeout' => self::REQUEST_TIMEOUT,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
 			return null;
 		}
 
-		$code = wp_remote_retrieve_response_code( $response );
+		$code = (int) wp_remote_retrieve_response_code( $response );
 		if ( $code !== 200 ) {
 			return null;
 		}
