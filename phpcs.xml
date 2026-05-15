@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<ruleset name="SEO Agent AI">
+    <description>WordPress Coding Standards for SEO Agent AI plugin.</description>
+
+    <file>.</file>
+    <exclude-pattern>vendor/*</exclude-pattern>
+    <exclude-pattern>node_modules/*</exclude-pattern>
+    <exclude-pattern>assets/*</exclude-pattern>
+
+    <rule ref="WordPress-Extra">
+        <!-- Doc comments are enforced only as warnings, not errors -->
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="Squiz.Commenting.ClassComment.Missing"/>
+        <exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+        <exclude name="Squiz.Commenting.FunctionComment.MissingParamTag"/>
+        <exclude name="Squiz.Commenting.FunctionComment.MissingParamComment"/>
+        <exclude name="Squiz.Commenting.FunctionComment.ParamCommentFullStop"/>
+        <exclude name="Squiz.Commenting.FileComment.Missing"/>
+        <exclude name="Squiz.Commenting.VariableComment.Missing"/>
+        <exclude name="Squiz.Commenting.FunctionCommentThrowTag.Missing"/>
+        <exclude name="Generic.Commenting.DocComment.MissingShort"/>
+        <!-- Short ternary is acceptable in modern PHP -->
+        <exclude name="Universal.Operators.DisallowShortTernary"/>
+    </rule>
+
+    <config name="minimum_supported_wp_version" value="6.0"/>
+
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="seo-agent-ai"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Demote Yoda conditions to warning -->
+    <rule ref="WordPress.PHP.YodaConditions">
+        <severity>3</severity>
+    </rule>
+
+    <arg name="colors"/>
+    <arg value="sp"/>
+    <arg name="extensions" value="php"/>
+</ruleset>

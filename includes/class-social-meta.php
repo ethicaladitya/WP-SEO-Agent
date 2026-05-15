@@ -16,7 +16,7 @@ class SEO_Agent_AI_Social_Meta {
 	// -------------------------------------------------------------------
 
 	public function init_hooks() {
-		add_action( 'wp_head', array( $this, 'output_meta_tags' ),        1 );
+		add_action( 'wp_head', array( $this, 'output_meta_tags' ), 1 );
 		add_action( 'wp_head', array( $this, 'output_verification_tags' ), 2 );
 	}
 
@@ -54,7 +54,7 @@ class SEO_Agent_AI_Social_Meta {
 
 		$og_desc = (string) get_post_meta( $post_id, '_seo_agent_ai_og_description', true );
 		if ( ! $og_desc ) {
-			$og_desc = has_excerpt( $post_id ) ? get_the_excerpt( $post_id ) : wp_trim_words( strip_tags( $post->post_content ), 30, '' );
+			$og_desc = has_excerpt( $post_id ) ? get_the_excerpt( $post_id ) : wp_trim_words( wp_strip_all_tags( $post->post_content ), 30, '' );
 		}
 
 		$og_url  = (string) get_permalink( $post_id );
@@ -108,9 +108,9 @@ class SEO_Agent_AI_Social_Meta {
 	// -------------------------------------------------------------------
 
 	private function output_homepage_tags() {
-		$title     = (string) get_option( 'seo_agent_ai_homepage_og_title',       '' );
+		$title     = (string) get_option( 'seo_agent_ai_homepage_og_title', '' );
 		$desc      = (string) get_option( 'seo_agent_ai_homepage_og_description', '' );
-		$image_url = (string) get_option( 'seo_agent_ai_homepage_og_image',       '' );
+		$image_url = (string) get_option( 'seo_agent_ai_homepage_og_image', '' );
 		$site_name = get_bloginfo( 'name' );
 
 		if ( ! $title ) {
@@ -150,7 +150,7 @@ class SEO_Agent_AI_Social_Meta {
 		}
 
 		$title     = $term->name;
-		$desc      = wp_strip_all_tags( term_description( $term->term_id, $term->taxonomy ) );
+		$desc      = wp_strip_all_tags( term_description( $term->term_id ) );
 		$url       = get_term_link( $term );
 		$site_name = get_bloginfo( 'name' );
 
@@ -174,9 +174,9 @@ class SEO_Agent_AI_Social_Meta {
 	// -------------------------------------------------------------------
 
 	public function output_verification_tags() {
-		$google  = (string) get_option( 'seo_agent_ai_google_verification', '' );
-		$bing    = (string) get_option( 'seo_agent_ai_bing_verification',   '' );
-		$yandex  = (string) get_option( 'seo_agent_ai_yandex_verification', '' );
+		$google = (string) get_option( 'seo_agent_ai_google_verification', '' );
+		$bing   = (string) get_option( 'seo_agent_ai_bing_verification', '' );
+		$yandex = (string) get_option( 'seo_agent_ai_yandex_verification', '' );
 
 		if ( $google ) {
 			echo '<meta name="google-site-verification" content="' . esc_attr( $google ) . '" />' . "\n";
@@ -202,9 +202,9 @@ class SEO_Agent_AI_Social_Meta {
 	public function get_post_social_data( $post_id ) {
 		$post_id  = (int) $post_id;
 		$post     = get_post( $post_id );
-		$og_title = (string) get_post_meta( $post_id, '_seo_agent_ai_og_title',       true );
+		$og_title = (string) get_post_meta( $post_id, '_seo_agent_ai_og_title', true );
 		$og_desc  = (string) get_post_meta( $post_id, '_seo_agent_ai_og_description', true );
-		$img_id   = (int) get_post_meta( $post_id, '_seo_agent_ai_og_image_id',       true );
+		$img_id   = (int) get_post_meta( $post_id, '_seo_agent_ai_og_image_id', true );
 
 		return array(
 			'og_title'       => $og_title,

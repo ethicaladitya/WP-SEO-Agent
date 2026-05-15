@@ -42,7 +42,7 @@ class SEO_Agent_AI_Image_SEO {
 	// -------------------------------------------------------------------
 
 	public function init_hooks() {
-		add_action( 'wp_ajax_seo_agent_ai_generate_alt',      array( $this, 'ajax_generate_alt' ) );
+		add_action( 'wp_ajax_seo_agent_ai_generate_alt', array( $this, 'ajax_generate_alt' ) );
 		add_action( 'wp_ajax_seo_agent_ai_bulk_generate_alt', array( $this, 'ajax_bulk_generate_alt' ) );
 	}
 
@@ -57,12 +57,13 @@ class SEO_Agent_AI_Image_SEO {
 	 * @return array[]
 	 */
 	public function get_images_missing_alt( $limit = 50 ) {
-		$query = new WP_Query( array(
-			'post_type'      => 'attachment',
-			'post_status'    => 'inherit',
-			'post_mime_type' => 'image',
-			'posts_per_page' => (int) $limit,
-			'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+				'post_mime_type' => 'image',
+				'posts_per_page' => (int) $limit,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 				'relation' => 'OR',
 				array(
 					'key'     => '_wp_attachment_image_alt',
@@ -73,8 +74,9 @@ class SEO_Agent_AI_Image_SEO {
 					'value'   => '',
 					'compare' => '=',
 				),
-			),
-		) );
+				),
+			)
+		);
 
 		$results = array();
 		if ( ! $query->have_posts() ) {
@@ -97,12 +99,12 @@ class SEO_Agent_AI_Image_SEO {
 			}
 
 			$results[] = array(
-				'id'               => (int) $post->ID,
-				'url'              => wp_get_attachment_url( $post->ID ),
-				'filename'         => basename( $filepath ?: '' ),
-				'parent_post_id'   => (int) $post->post_parent,
+				'id'                => (int) $post->ID,
+				'url'               => wp_get_attachment_url( $post->ID ),
+				'filename'          => basename( $filepath ?: '' ),
+				'parent_post_id'    => (int) $post->post_parent,
 				'parent_post_title' => $parent_title,
-				'filesize_kb'      => $filesize_kb,
+				'filesize_kb'       => $filesize_kb,
 			);
 		}
 
@@ -150,7 +152,10 @@ class SEO_Agent_AI_Image_SEO {
 		$post          = get_post( $attachment_id );
 
 		if ( ! $post || $post->post_type !== 'attachment' ) {
-			return array( 'score' => 0, 'breakdown' => array() );
+			return array(
+				'score'     => 0,
+				'breakdown' => array(),
+			);
 		}
 
 		$alt      = (string) get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
@@ -246,10 +251,10 @@ class SEO_Agent_AI_Image_SEO {
 			return new WP_Error( 'not_found', __( 'Attachment not found.', 'seo-agent-ai' ) );
 		}
 
-		$filepath  = get_attached_file( $attachment_id );
-		$filename  = $filepath ? basename( $filepath ) : '';
-		$title     = $post->post_title;
-		$caption   = $post->post_excerpt;
+		$filepath = get_attached_file( $attachment_id );
+		$filename = $filepath ? basename( $filepath ) : '';
+		$title    = $post->post_title;
+		$caption  = $post->post_excerpt;
 
 		$post_title = '';
 		$keyword    = '';
@@ -318,12 +323,12 @@ class SEO_Agent_AI_Image_SEO {
 
 		foreach ( $images as $image ) {
 			$result = $this->generate_alt_text( $image['id'], $image['parent_post_id'] );
-			$processed++;
+			++$processed;
 
 			if ( is_wp_error( $result ) ) {
-				$failed++;
+				++$failed;
 			} else {
-				$success++;
+				++$success;
 			}
 
 			if ( $processed < count( $images ) ) {

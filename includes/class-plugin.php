@@ -160,14 +160,14 @@ class SEO_Agent_AI_Plugin {
 		$this->queue_manager        = new SEO_Agent_AI_Queue_Manager( $this->logger );
 
 		// Admin page sub-page instances.
-		$connect_page            = new SEO_Agent_AI_Connect_Page( $this->oauth );
-		$report_page             = new SEO_Agent_AI_Report_Page( $this->activity_log, $this->data_store );
-		$dashboard_page          = new SEO_Agent_AI_Dashboard_Page( $this->decision_engine, $this->report_engine );
-		$opportunities_page      = new SEO_Agent_AI_Opportunities_Page( $this->decision_engine );
-		$rankings_page           = new SEO_Agent_AI_Rankings_Page();
-		$pending_approvals_page  = new SEO_Agent_AI_Pending_Approvals_Page( $this->decision_engine, $this->fix_executor, $this->internal_link_engine );
-		$rollback_center_page    = new SEO_Agent_AI_Rollback_Center_Page( $this->fix_executor, $this->activity_log );
-		$cron_status_page        = new SEO_Agent_AI_Cron_Status_Page();
+		$connect_page           = new SEO_Agent_AI_Connect_Page( $this->oauth );
+		$report_page            = new SEO_Agent_AI_Report_Page( $this->activity_log, $this->data_store );
+		$dashboard_page         = new SEO_Agent_AI_Dashboard_Page( $this->decision_engine, $this->report_engine );
+		$opportunities_page     = new SEO_Agent_AI_Opportunities_Page( $this->decision_engine );
+		$rankings_page          = new SEO_Agent_AI_Rankings_Page();
+		$pending_approvals_page = new SEO_Agent_AI_Pending_Approvals_Page( $this->decision_engine, $this->fix_executor, $this->internal_link_engine );
+		$rollback_center_page   = new SEO_Agent_AI_Rollback_Center_Page( $this->fix_executor, $this->activity_log );
+		$cron_status_page       = new SEO_Agent_AI_Cron_Status_Page();
 
 		$this->admin_page = new SEO_Agent_AI_Admin_Page(
 			$this->data_store,
@@ -185,43 +185,43 @@ class SEO_Agent_AI_Plugin {
 
 		// Admin hooks.
 		add_action( 'admin_menu', array( $this->admin_page, 'register_menu' ) );
-		add_action( 'admin_post_seo_agent_ai_apply_fix',        array( $this, 'handle_apply_fix' ) );
-		add_action( 'admin_post_seo_agent_ai_run_analysis',     array( $this, 'handle_manual_analysis' ) );
-		add_action( 'admin_post_seo_agent_ai_save_settings',    array( $this, 'handle_save_settings' ) );
-		add_action( 'admin_post_seo_agent_ai_test_connection',  array( $this, 'handle_test_connection' ) );
+		add_action( 'admin_post_seo_agent_ai_apply_fix', array( $this, 'handle_apply_fix' ) );
+		add_action( 'admin_post_seo_agent_ai_run_analysis', array( $this, 'handle_manual_analysis' ) );
+		add_action( 'admin_post_seo_agent_ai_save_settings', array( $this, 'handle_save_settings' ) );
+		add_action( 'admin_post_seo_agent_ai_test_connection', array( $this, 'handle_test_connection' ) );
 		add_action( 'admin_post_seo_agent_ai_google_disconnect', array( $this, 'handle_google_disconnect' ) );
-		add_action( 'admin_post_seo_agent_ai_rollback_backup',  array( $this, 'handle_rollback_backup' ) );
-		add_action( 'admin_post_seo_agent_ai_rollback',         array( $this, 'handle_activity_rollback' ) );
+		add_action( 'admin_post_seo_agent_ai_rollback_backup', array( $this, 'handle_rollback_backup' ) );
+		add_action( 'admin_post_seo_agent_ai_rollback', array( $this, 'handle_activity_rollback' ) );
 
 		// New v3.0 admin-post handlers.
-		add_action( 'admin_post_seo_agent_ai_decision',         array( $pending_approvals_page, 'handle_action' ) );
-		add_action( 'admin_post_seo_agent_ai_rollback_new',     array( $rollback_center_page, 'handle_rollback' ) );
-		add_action( 'admin_post_seo_agent_ai_trigger_cron',     array( $cron_status_page, 'handle_trigger' ) );
+		add_action( 'admin_post_seo_agent_ai_decision', array( $pending_approvals_page, 'handle_action' ) );
+		add_action( 'admin_post_seo_agent_ai_rollback_new', array( $rollback_center_page, 'handle_rollback' ) );
+		add_action( 'admin_post_seo_agent_ai_trigger_cron', array( $cron_status_page, 'handle_trigger' ) );
 
 		// OAuth callback — must run before page output.
 		add_action( 'admin_init', array( $this, 'maybe_handle_oauth_callback' ) );
 
 		// AJAX: property listing for Settings page.
-		add_action( 'wp_ajax_seo_agent_ai_list_gsc_sites',      array( $this, 'ajax_list_gsc_sites' ) );
+		add_action( 'wp_ajax_seo_agent_ai_list_gsc_sites', array( $this, 'ajax_list_gsc_sites' ) );
 		add_action( 'wp_ajax_seo_agent_ai_list_ga4_properties', array( $this, 'ajax_list_ga4_properties' ) );
 
 		// AJAX: interactive batch analysis.
 		add_action( 'wp_ajax_seo_agent_ai_analyze_batch', array( $this, 'ajax_analyze_batch' ) );
 
 		// Cron hooks — daily.
-		add_action( self::CRON_HOOK_DAILY,  array( $this, 'run_daily_analysis' ) );
+		add_action( self::CRON_HOOK_DAILY, array( $this, 'run_daily_analysis' ) );
 		add_action( self::CRON_HOOK_MANUAL, array( $this, 'run_daily_analysis' ) );
-		add_action( self::CRON_HOOK_GSC,    array( $this, 'run_fetch_gsc' ) );
-		add_action( self::CRON_HOOK_GA4,    array( $this, 'run_fetch_ga4' ) );
+		add_action( self::CRON_HOOK_GSC, array( $this, 'run_fetch_gsc' ) );
+		add_action( self::CRON_HOOK_GA4, array( $this, 'run_fetch_ga4' ) );
 		add_action( self::CRON_HOOK_REPORT, array( $this, 'run_generate_report' ) );
 
 		// Cron hooks — weekly.
-		add_action( self::CRON_HOOK_SCORE,   array( $this, 'run_score_pages' ) );
-		add_action( self::CRON_HOOK_DECAY,   array( $this, 'run_detect_decay' ) );
-		add_action( self::CRON_HOOK_LINKS,   array( $this, 'run_internal_links' ) );
-		add_action( self::CRON_HOOK_PURGE,   array( $this, 'run_purge_old_data' ) );
+		add_action( self::CRON_HOOK_SCORE, array( $this, 'run_score_pages' ) );
+		add_action( self::CRON_HOOK_DECAY, array( $this, 'run_detect_decay' ) );
+		add_action( self::CRON_HOOK_LINKS, array( $this, 'run_internal_links' ) );
+		add_action( self::CRON_HOOK_PURGE, array( $this, 'run_purge_old_data' ) );
 		add_action( self::CRON_HOOK_CANNIBAL, array( $this, 'run_detect_cannibalization' ) );
-		add_action( self::CRON_HOOK_IMPROVE,  array( $this, 'run_improve_low_scoring_posts' ) );
+		add_action( self::CRON_HOOK_IMPROVE, array( $this, 'run_improve_low_scoring_posts' ) );
 
 		// Cron hook — orphan detection.
 		add_action( self::CRON_HOOK_ORPHAN, array( $this, 'run_detect_orphans' ) );
@@ -260,12 +260,12 @@ class SEO_Agent_AI_Plugin {
 			self::CRON_HOOK_GA4,
 			self::CRON_HOOK_REPORT,
 		);
-		$offset = 0;
+		$offset      = 0;
 		foreach ( $daily_hooks as $hook ) {
 			if ( ! wp_next_scheduled( $hook ) ) {
 				wp_schedule_event( time() + HOUR_IN_SECONDS + $offset * 5 * MINUTE_IN_SECONDS, 'daily', $hook );
 			}
-			$offset++;
+			++$offset;
 		}
 
 		$weekly_hooks = array(
@@ -367,14 +367,16 @@ class SEO_Agent_AI_Plugin {
 	public function run_fetch_gsc() {
 		$this->logger->info( 'Starting dedicated GSC keyword history fetch.' );
 		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
-		$posts      = get_posts( array(
-			'post_type'   => $post_types ?: array( 'post' ),
-			'post_status' => 'publish',
-			'numberposts' => 100,
-		) );
+		$posts      = get_posts(
+			array(
+				'post_type'   => $post_types ?: array( 'post' ),
+				'post_status' => 'publish',
+				'numberposts' => 100,
+			)
+		);
 
 		foreach ( $posts as $post ) {
-			$url  = get_permalink( $post );
+			$url = get_permalink( $post );
 			if ( ! $url ) {
 				continue;
 			}
@@ -421,11 +423,13 @@ class SEO_Agent_AI_Plugin {
 	public function run_score_pages() {
 		$this->logger->info( 'Starting weekly SEO scoring pass.' );
 		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
-		$posts      = get_posts( array(
-			'post_type'   => $post_types ?: array( 'post' ),
-			'post_status' => 'publish',
-			'numberposts' => 200,
-		) );
+		$posts      = get_posts(
+			array(
+				'post_type'   => $post_types ?: array( 'post' ),
+				'post_status' => 'publish',
+				'numberposts' => 200,
+			)
+		);
 
 		foreach ( $posts as $post ) {
 			$score_data = $this->scoring_engine->score( $post );
@@ -441,11 +445,13 @@ class SEO_Agent_AI_Plugin {
 	public function run_detect_decay() {
 		$this->logger->info( 'Running content decay detection.' );
 		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
-		$posts      = get_posts( array(
-			'post_type'   => $post_types ?: array( 'post' ),
-			'post_status' => 'publish',
-			'numberposts' => 100,
-		) );
+		$posts      = get_posts(
+			array(
+				'post_type'   => $post_types ?: array( 'post' ),
+				'post_status' => 'publish',
+				'numberposts' => 100,
+			)
+		);
 
 		$flagged = 0;
 		foreach ( $posts as $post ) {
@@ -468,7 +474,7 @@ class SEO_Agent_AI_Plugin {
 				'risk_level'      => 'safe',
 			);
 			$this->decision_engine->process( (int) $post->ID, $rec, 0.70, false );
-			$flagged++;
+			++$flagged;
 		}
 
 		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_DECAY, current_time( 'mysql' ), false );
@@ -489,8 +495,10 @@ class SEO_Agent_AI_Plugin {
 		$since = gmdate( 'Y-m-d', strtotime( '-28 days' ) );
 
 		// Aggregate impressions per (post_id, keyword) over the last 28 days.
-		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT post_id, keyword,
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT post_id, keyword,
 			        SUM(impressions) AS total_impressions,
 			        AVG(position) AS avg_position
 			 FROM {$table}
@@ -498,8 +506,10 @@ class SEO_Agent_AI_Plugin {
 			 GROUP BY post_id, keyword
 			 HAVING total_impressions >= 20
 			 ORDER BY keyword, total_impressions DESC",
-			$since
-		), ARRAY_A );
+				$since
+			),
+			ARRAY_A
+		);
 
 		if ( empty( $rows ) ) {
 			$this->logger->info( 'No keyword history data for cannibalization check.' );
@@ -528,11 +538,14 @@ class SEO_Agent_AI_Plugin {
 			}
 
 			// Sort: best-ranking page first (lowest position number = better).
-			usort( $pages, function( $a, $b ) {
-				return $a['position'] <=> $b['position'];
-			} );
+			usort(
+				$pages,
+				function ( $a, $b ) {
+					return $a['position'] <=> $b['position'];
+				}
+			);
 
-			$primary          = $pages[0];
+			$primary           = $pages[0];
 			$total_impressions = array_sum( array_column( $pages, 'impressions' ) );
 
 			// Flag each weaker competing page.
@@ -547,7 +560,7 @@ class SEO_Agent_AI_Plugin {
 					'confidence'      => $confidence,
 					'reasoning'       => sprintf(
 						/* translators: 1: keyword, 2: primary position, 3: competing position. */
-						__( 'Keyword “%1$s” ranks for multiple pages (positions %.1f vs %.1f). Consider differentiating or consolidating content.', 'seo-agent-ai' ),
+						__( 'Keyword “%1$s” ranks for multiple pages (positions %2$.1f vs %3$.1f). Consider differentiating or consolidating content.', 'seo-agent-ai' ),
 						esc_html( $keyword ),
 						$primary['position'],
 						$competing['position']
@@ -557,7 +570,7 @@ class SEO_Agent_AI_Plugin {
 				);
 
 				$this->decision_engine->process( (int) $competing['post_id'], $rec, 0.70, false );
-				$flagged++;
+				++$flagged;
 			}
 		}
 
@@ -626,16 +639,18 @@ class SEO_Agent_AI_Plugin {
 			}
 
 			$this->generate_score_improvements( $post, $score_data, $autopilot );
-			$queued++;
+			++$queued;
 		}
 
 		update_option( 'seo_agent_ai_last_run_' . self::CRON_HOOK_IMPROVE, current_time( 'mysql' ), false );
-		$this->logger->info( sprintf(
-			'Score improvement pass complete. Checked: %d, queued improvements for: %d (target ≥ %d).',
-			count( $post_ids ),
-			$queued,
-			$target
-		) );
+		$this->logger->info(
+			sprintf(
+				'Score improvement pass complete. Checked: %d, queued improvements for: %d (target ≥ %d).',
+				count( $post_ids ),
+				$queued,
+				$target
+			)
+		);
 	}
 
 	/**
@@ -658,12 +673,18 @@ class SEO_Agent_AI_Plugin {
 		$gsc_safe    = is_wp_error( $gsc_metrics ) ? array() : (array) $gsc_metrics;
 		$ga4_safe    = is_wp_error( $ga4_metrics ) ? array() : (array) $ga4_metrics;
 
-		$seo_audit   = $this->bridge->audit_post( (int) $post->ID, $post );
-		$analysis    = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
-		$min_conf    = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
+		$seo_audit = $this->bridge->audit_post( (int) $post->ID, $post );
+		$analysis  = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
+		$min_conf  = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
 
 		$recommendations = $this->recommendation_engine->generate(
-			$post, $analysis, $gsc_safe, $ga4_safe, $seo_audit, $min_conf, false
+			$post,
+			$analysis,
+			$gsc_safe,
+			$ga4_safe,
+			$seo_audit,
+			$min_conf,
+			false
 		);
 
 		if ( empty( $recommendations ) ) {
@@ -679,13 +700,16 @@ class SEO_Agent_AI_Plugin {
 		asort( $dim_scores );
 		$weakest_dims = array_keys( $dim_scores );
 
-		usort( $recommendations, function( $a, $b ) use ( $weakest_dims ) {
-			$a_idx = array_search( $a['field'] ?? '', $weakest_dims, true );
-			$b_idx = array_search( $b['field'] ?? '', $weakest_dims, true );
-			$a_idx = $a_idx === false ? PHP_INT_MAX : $a_idx;
-			$b_idx = $b_idx === false ? PHP_INT_MAX : $b_idx;
-			return $a_idx <=> $b_idx;
-		} );
+		usort(
+			$recommendations,
+			function ( $a, $b ) use ( $weakest_dims ) {
+				$a_idx = array_search( $a['field'] ?? '', $weakest_dims, true );
+				$b_idx = array_search( $b['field'] ?? '', $weakest_dims, true );
+				$a_idx = $a_idx === false ? PHP_INT_MAX : $a_idx;
+				$b_idx = $b_idx === false ? PHP_INT_MAX : $b_idx;
+				return $a_idx <=> $b_idx;
+			}
+		);
 
 		$this->data_store->save_recommendations( (int) $post->ID, $recommendations );
 
@@ -773,26 +797,28 @@ class SEO_Agent_AI_Plugin {
 			$posts = $this->get_posts_for_analysis( 50 );
 
 			foreach ( $posts as $post ) {
-				$processed++;
+				++$processed;
 				$result = $this->analyze_single_post( $post, $autopilot );
 				if ( $result['had_api_failure'] ) {
-					$failed++;
+					++$failed;
 				}
 				if ( $result['had_recommendations'] ) {
-					$with_recs++;
+					++$with_recs;
 				}
 			}
 
 			$this->update_api_failure_tracker( $processed, $failed );
 
-			$this->data_store->set_last_run( array(
-				'started_at'                 => $started_at,
-				'finished_at'                => current_time( 'mysql' ),
-				'processed_posts'            => $processed,
-				'posts_with_recommendations' => $with_recs,
-				'failed_posts'               => $failed,
-				'mode'                       => wp_doing_cron() ? 'cron' : 'manual',
-			) );
+			$this->data_store->set_last_run(
+				array(
+					'started_at'                 => $started_at,
+					'finished_at'                => current_time( 'mysql' ),
+					'processed_posts'            => $processed,
+					'posts_with_recommendations' => $with_recs,
+					'failed_posts'               => $failed,
+					'mode'                       => wp_doing_cron() ? 'cron' : 'manual',
+				)
+			);
 
 			if ( $log_retention > 0 ) {
 				$this->activity_log->purge_old_entries( $log_retention );
@@ -812,7 +838,10 @@ class SEO_Agent_AI_Plugin {
 	private function analyze_single_post( WP_Post $post, $autopilot = false ) {
 		$url = get_permalink( $post );
 		if ( ! $url ) {
-			return array( 'had_recommendations' => false, 'had_api_failure' => false );
+			return array(
+				'had_recommendations' => false,
+				'had_api_failure'     => false,
+			);
 		}
 
 		$gsc_metrics = $this->gsc_client->get_page_metrics( $url );
@@ -834,7 +863,13 @@ class SEO_Agent_AI_Plugin {
 		$analysis        = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
 		$autopilot_conf  = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
 		$recommendations = $this->recommendation_engine->generate(
-			$post, $analysis, $gsc_safe, $ga4_safe, $seo_audit, $autopilot_conf, false
+			$post,
+			$analysis,
+			$gsc_safe,
+			$ga4_safe,
+			$seo_audit,
+			$autopilot_conf,
+			false
 		);
 
 		$metrics = array(
@@ -900,15 +935,17 @@ class SEO_Agent_AI_Plugin {
 			$offset = 0;
 		}
 
-		$posts = get_posts( array(
-			'post_type'     => $post_types,
-			'post_status'   => 'publish',
-			'numberposts'   => (int) $count,
-			'offset'        => $offset,
-			'orderby'       => 'ID',
-			'order'         => 'ASC',
-			'no_found_rows' => true,
-		) );
+		$posts = get_posts(
+			array(
+				'post_type'     => $post_types,
+				'post_status'   => 'publish',
+				'numberposts'   => (int) $count,
+				'offset'        => $offset,
+				'orderby'       => 'ID',
+				'order'         => 'ASC',
+				'no_found_rows' => true,
+			)
+		);
 
 		// Advance offset; wrap to zero when we pass the end of the list.
 		$new_offset = $offset + count( $posts );
@@ -939,13 +976,15 @@ class SEO_Agent_AI_Plugin {
 
 		// For AJAX batch we get a consistent snapshot of posts for the session.
 		$post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
-		$posts = get_posts( array(
-			'post_type'   => $post_types ?: array( 'post' ),
-			'post_status' => 'publish',
-			'numberposts' => 200,
-			'orderby'     => 'modified',
-			'order'       => 'DESC',
-		) );
+		$posts      = get_posts(
+			array(
+				'post_type'   => $post_types ?: array( 'post' ),
+				'post_status' => 'publish',
+				'numberposts' => 200,
+				'orderby'     => 'modified',
+				'order'       => 'DESC',
+			)
+		);
 
 		$total = count( $posts );
 
@@ -959,7 +998,11 @@ class SEO_Agent_AI_Plugin {
 		} else {
 			$state = get_transient( self::BATCH_ANALYSIS_KEY );
 			if ( ! is_array( $state ) ) {
-				$state = array( 'with_recs' => 0, 'failed' => 0, 'started_at' => current_time( 'mysql' ) );
+				$state = array(
+					'with_recs'  => 0,
+					'failed'     => 0,
+					'started_at' => current_time( 'mysql' ),
+				);
 			}
 		}
 
@@ -970,10 +1013,10 @@ class SEO_Agent_AI_Plugin {
 			$current_title = $post->post_title;
 			$result        = $this->analyze_single_post( $post, $autopilot );
 			if ( $result['had_api_failure'] ) {
-				$state['failed']++;
+				++$state['failed'];
 			}
 			if ( $result['had_recommendations'] ) {
-				$state['with_recs']++;
+				++$state['with_recs'];
 			}
 		}
 
@@ -983,14 +1026,16 @@ class SEO_Agent_AI_Plugin {
 		set_transient( self::BATCH_ANALYSIS_KEY, $state, 30 * MINUTE_IN_SECONDS );
 
 		if ( $done ) {
-			$this->data_store->set_last_run( array(
-				'started_at'                 => $state['started_at'],
-				'finished_at'                => current_time( 'mysql' ),
-				'processed_posts'            => $total,
-				'posts_with_recommendations' => (int) $state['with_recs'],
-				'failed_posts'               => (int) $state['failed'],
-				'mode'                       => 'manual',
-			) );
+			$this->data_store->set_last_run(
+				array(
+					'started_at'                 => $state['started_at'],
+					'finished_at'                => current_time( 'mysql' ),
+					'processed_posts'            => $total,
+					'posts_with_recommendations' => (int) $state['with_recs'],
+					'failed_posts'               => (int) $state['failed'],
+					'mode'                       => 'manual',
+				)
+			);
 			$log_retention = (int) get_option( 'seo_agent_ai_log_retention_days', 90 );
 			if ( $log_retention > 0 ) {
 				$this->activity_log->purge_old_entries( $log_retention );
@@ -999,15 +1044,17 @@ class SEO_Agent_AI_Plugin {
 			delete_transient( self::BATCH_ANALYSIS_KEY );
 		}
 
-		wp_send_json_success( array(
-			'processed'     => $processed,
-			'total'         => $total,
-			'percent'       => $total > 0 ? (int) round( ( $processed / $total ) * 100 ) : 100,
-			'done'          => $done,
-			'current_title' => $current_title,
-			'with_recs'     => (int) $state['with_recs'],
-			'failed'        => (int) $state['failed'],
-		) );
+		wp_send_json_success(
+			array(
+				'processed'     => $processed,
+				'total'         => $total,
+				'percent'       => $total > 0 ? (int) round( ( $processed / $total ) * 100 ) : 100,
+				'done'          => $done,
+				'current_title' => $current_title,
+				'with_recs'     => (int) $state['with_recs'],
+				'failed'        => (int) $state['failed'],
+			)
+		);
 	}
 
 	// -------------------------------------------------------------------
@@ -1054,7 +1101,7 @@ class SEO_Agent_AI_Plugin {
 			);
 
 			if ( ! is_wp_error( $result ) ) {
-				$applied_today++;
+				++$applied_today;
 				set_transient( $date_key, $applied_today, DAY_IN_SECONDS );
 				// Mark the queued decision as applied so it doesn't re-appear as pending.
 				if ( ! empty( $rec['decision_id'] ) ) {
@@ -1208,11 +1255,11 @@ class SEO_Agent_AI_Plugin {
 		$log_retention = isset( $_POST['log_retention_days'] ) ? max( 7, min( 730, absint( $_POST['log_retention_days'] ) ) ) : 90;
 
 		// OpenAI / AI provider settings.
-		$ai_provider    = isset( $_POST['ai_provider'] ) ? sanitize_key( $_POST['ai_provider'] ) : 'gemini';
-		$openai_key     = isset( $_POST['openai_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_api_key'] ) ) : '';
-		$openai_url     = isset( $_POST['openai_base_url'] ) ? esc_url_raw( wp_unslash( $_POST['openai_base_url'] ) ) : '';
-		$openai_model   = isset( $_POST['openai_model'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_model'] ) ) : '';
-		$email_reports  = ! empty( $_POST['email_reports'] );
+		$ai_provider   = isset( $_POST['ai_provider'] ) ? sanitize_key( $_POST['ai_provider'] ) : 'gemini';
+		$openai_key    = isset( $_POST['openai_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_api_key'] ) ) : '';
+		$openai_url    = isset( $_POST['openai_base_url'] ) ? esc_url_raw( wp_unslash( $_POST['openai_base_url'] ) ) : '';
+		$openai_model  = isset( $_POST['openai_model'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_model'] ) ) : '';
+		$email_reports = ! empty( $_POST['email_reports'] );
 
 		if ( ! in_array( $ai_provider, array( 'gemini', 'openai', 'auto' ), true ) ) {
 			$ai_provider = 'gemini';
@@ -1269,11 +1316,23 @@ class SEO_Agent_AI_Plugin {
 			self::CONNECTION_TEST_TRANSIENT,
 			array(
 				'gsc'       => is_wp_error( $gsc_result )
-					? array( 'success' => false, 'message' => $gsc_result->get_error_message() )
-					: array( 'success' => true, 'message' => isset( $gsc_result['message'] ) ? (string) $gsc_result['message'] : __( 'Search Console connected.', 'seo-agent-ai' ) ),
+					? array(
+						'success' => false,
+						'message' => $gsc_result->get_error_message(),
+					)
+					: array(
+						'success' => true,
+						'message' => isset( $gsc_result['message'] ) ? (string) $gsc_result['message'] : __( 'Search Console connected.', 'seo-agent-ai' ),
+					),
 				'analytics' => is_wp_error( $analytics_result )
-					? array( 'success' => false, 'message' => $analytics_result->get_error_message() )
-					: array( 'success' => true, 'message' => isset( $analytics_result['message'] ) ? (string) $analytics_result['message'] : __( 'Analytics connected.', 'seo-agent-ai' ) ),
+					? array(
+						'success' => false,
+						'message' => $analytics_result->get_error_message(),
+					)
+					: array(
+						'success' => true,
+						'message' => isset( $analytics_result['message'] ) ? (string) $analytics_result['message'] : __( 'Analytics connected.', 'seo-agent-ai' ),
+					),
 			),
 			5 * MINUTE_IN_SECONDS
 		);
@@ -1310,7 +1369,7 @@ class SEO_Agent_AI_Plugin {
 			return;
 		}
 
-		$code  = filter_input( INPUT_GET, 'code',  FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		$code  = filter_input( INPUT_GET, 'code', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$state = filter_input( INPUT_GET, 'state', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$error = filter_input( INPUT_GET, 'error', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 
@@ -1465,7 +1524,11 @@ class SEO_Agent_AI_Plugin {
 	public function analyze_post_for_cli( WP_Post $post, $autopilot = false, $dry_run = false ) {
 		$url = get_permalink( $post );
 		if ( ! $url ) {
-			return array( 'had_recommendations' => false, 'had_api_failure' => false, 'signals' => array() );
+			return array(
+				'had_recommendations' => false,
+				'had_api_failure'     => false,
+				'signals'             => array(),
+			);
 		}
 
 		$gsc_metrics = $this->gsc_client->get_page_metrics( $url );
@@ -1479,16 +1542,25 @@ class SEO_Agent_AI_Plugin {
 		$analysis        = $this->analyzer->analyze( $post, $gsc_safe, $ga4_safe, $seo_audit );
 		$autopilot_conf  = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
 		$recommendations = $this->recommendation_engine->generate(
-			$post, $analysis, $gsc_safe, $ga4_safe, $seo_audit, $autopilot_conf, $dry_run
+			$post,
+			$analysis,
+			$gsc_safe,
+			$ga4_safe,
+			$seo_audit,
+			$autopilot_conf,
+			$dry_run
 		);
 
 		if ( ! $dry_run ) {
-			$this->data_store->save_post_metrics( (int) $post->ID, array(
-				'gsc'        => $gsc_safe,
-				'ga4'        => $ga4_safe,
-				'analysis'   => $analysis,
-				'updated_at' => current_time( 'mysql' ),
-			) );
+			$this->data_store->save_post_metrics(
+				(int) $post->ID,
+				array(
+					'gsc'        => $gsc_safe,
+					'ga4'        => $ga4_safe,
+					'analysis'   => $analysis,
+					'updated_at' => current_time( 'mysql' ),
+				)
+			);
 			$this->data_store->save_recommendations( (int) $post->ID, $recommendations );
 			update_post_meta( (int) $post->ID, '_seo_agent_ai_last_analyzed', current_time( 'mysql' ) );
 
@@ -1519,12 +1591,12 @@ class SEO_Agent_AI_Plugin {
 
 		$this->logger->info( 'Starting orphan page detection.' );
 
-		$posts    = $this->get_posts_for_analysis( 100 );
-		$orphans  = 0;
-		$checked  = 0;
+		$posts   = $this->get_posts_for_analysis( 100 );
+		$orphans = 0;
+		$checked = 0;
 
 		foreach ( $posts as $post ) {
-			$permalink      = get_permalink( $post );
+			$permalink = get_permalink( $post );
 			if ( ! $permalink ) {
 				continue;
 			}
@@ -1535,25 +1607,27 @@ class SEO_Agent_AI_Plugin {
 
 			// Count other published posts whose content contains a link to this post.
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
-			$link_count = (int) $wpdb->get_var( $wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts}
+			$link_count = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->posts}
 				 WHERE post_status = 'publish'
 				   AND ID != %d
 				   AND post_content LIKE %s",
-				$post->ID,
-				'%' . $wpdb->esc_like( $permalink_path ) . '%'
-			) );
+					$post->ID,
+					'%' . $wpdb->esc_like( $permalink_path ) . '%'
+				)
+			);
 
-			$checked++;
+			++$checked;
 
 			if ( $link_count === 0 ) {
-				$orphans++;
+				++$orphans;
 				$rec = array(
-					'type'        => 'internal_linking',
-					'field'       => 'content',
-					'confidence'  => 0.65,
-					'reasoning'   => __( 'This post has no inbound internal links (orphan page). Adding internal links from related posts will help search engines discover and rank it.', 'seo-agent-ai' ),
-					'risk_level'  => 'safe',
+					'type'       => 'internal_linking',
+					'field'      => 'content',
+					'confidence' => 0.65,
+					'reasoning'  => __( 'This post has no inbound internal links (orphan page). Adding internal links from related posts will help search engines discover and rank it.', 'seo-agent-ai' ),
+					'risk_level' => 'safe',
 				);
 
 				$this->decision_engine->process( (int) $post->ID, $rec, 0.65, false );
@@ -1568,20 +1642,36 @@ class SEO_Agent_AI_Plugin {
 	// Accessor methods for WP-CLI and admin pages
 	// -------------------------------------------------------------------
 
-	public function get_gsc_client() { return $this->gsc_client; }
-	public function get_ga4_client() { return $this->ga4_client; }
-	public function get_analyzer() { return $this->analyzer; }
-	public function get_recommendation_engine() { return $this->recommendation_engine; }
-	public function get_fix_executor() { return $this->fix_executor; }
-	public function get_scoring_engine() { return $this->scoring_engine; }
-	public function get_decision_engine() { return $this->decision_engine; }
-	public function get_report_engine() { return $this->report_engine; }
-	public function get_queue_manager() { return $this->queue_manager; }
-	public function get_logger() { return $this->logger; }
-	public function get_oauth() { return $this->oauth; }
-	public function get_gemini() { return $this->gemini; }
-	public function get_openai() { return $this->openai; }
-	public function get_data_store() { return $this->data_store; }
-	public function get_activity_log() { return $this->activity_log; }
-	public function get_bridge() { return $this->bridge; }
+	public function get_gsc_client() {
+		return $this->gsc_client; }
+	public function get_ga4_client() {
+		return $this->ga4_client; }
+	public function get_analyzer() {
+		return $this->analyzer; }
+	public function get_recommendation_engine() {
+		return $this->recommendation_engine; }
+	public function get_fix_executor() {
+		return $this->fix_executor; }
+	public function get_scoring_engine() {
+		return $this->scoring_engine; }
+	public function get_decision_engine() {
+		return $this->decision_engine; }
+	public function get_report_engine() {
+		return $this->report_engine; }
+	public function get_queue_manager() {
+		return $this->queue_manager; }
+	public function get_logger() {
+		return $this->logger; }
+	public function get_oauth() {
+		return $this->oauth; }
+	public function get_gemini() {
+		return $this->gemini; }
+	public function get_openai() {
+		return $this->openai; }
+	public function get_data_store() {
+		return $this->data_store; }
+	public function get_activity_log() {
+		return $this->activity_log; }
+	public function get_bridge() {
+		return $this->bridge; }
 }

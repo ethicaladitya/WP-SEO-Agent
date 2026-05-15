@@ -44,7 +44,8 @@ class SEO_Agent_AI_DB_Manager {
 		$cc = $wpdb->get_charset_collate();
 
 		// 1. Keyword ranking history — one row per (post, keyword, date).
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_KEYWORD_HISTORY . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_KEYWORD_HISTORY . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			post_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			keyword varchar(500) NOT NULL DEFAULT '',
@@ -56,10 +57,12 @@ class SEO_Agent_AI_DB_Manager {
 			PRIMARY KEY  (id),
 			KEY post_recorded (post_id, recorded_at),
 			KEY kw_recorded (keyword(100), recorded_at)
-		) $cc;" );
+		) $cc;"
+		);
 
 		// 2. Per-page SEO score snapshots (7 dimensions + overall).
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_PAGE_INSIGHTS . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_PAGE_INSIGHTS . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			post_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			score_overall tinyint(3) unsigned NOT NULL DEFAULT 0,
@@ -74,10 +77,12 @@ class SEO_Agent_AI_DB_Manager {
 			PRIMARY KEY  (id),
 			KEY post_id (post_id),
 			KEY recorded_at (recorded_at)
-		) $cc;" );
+		) $cc;"
+		);
 
 		// 3. AI decision queue — pending approvals + historical decisions.
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_AI_DECISIONS . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_AI_DECISIONS . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			post_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			decision_type varchar(60) NOT NULL DEFAULT '',
@@ -96,10 +101,12 @@ class SEO_Agent_AI_DB_Manager {
 			KEY post_id (post_id),
 			KEY status (status),
 			KEY created_at (created_at)
-		) $cc;" );
+		) $cc;"
+		);
 
 		// 4. Daily generated reports — one row per calendar day.
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_DAILY_REPORTS . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_DAILY_REPORTS . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			report_date date NOT NULL,
 			report_data longtext NOT NULL,
@@ -110,10 +117,12 @@ class SEO_Agent_AI_DB_Manager {
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY report_date (report_date)
-		) $cc;" );
+		) $cc;"
+		);
 
 		// 5. Internal link tracking — links added by the plugin.
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_INTERNAL_LINKS . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_INTERNAL_LINKS . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			source_post_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			target_post_id bigint(20) unsigned NOT NULL DEFAULT 0,
@@ -126,7 +135,8 @@ class SEO_Agent_AI_DB_Manager {
 			KEY source_post_id (source_post_id),
 			KEY target_post_id (target_post_id),
 			KEY status (status)
-		) $cc;" );
+		) $cc;"
+		);
 
 		// Redirect manager tables.
 		SEO_Agent_AI_Redirect_Manager::create_table();
@@ -214,21 +224,27 @@ class SEO_Agent_AI_DB_Manager {
 		$table   = self::ai_decisions_table();
 
 		// Deduplicate: if a pending decision for this post+type+field already exists, return that ID.
-		$existing_id = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT id FROM {$table} WHERE post_id = %d AND decision_type = %s AND field = %s AND status = %s LIMIT 1",
-			$post_id,
-			$type,
-			$field,
-			self::STATUS_PENDING
-		) );
+		$existing_id = $wpdb->get_var(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT id FROM {$table} WHERE post_id = %d AND decision_type = %s AND field = %s AND status = %s LIMIT 1",
+				$post_id,
+				$type,
+				$field,
+				self::STATUS_PENDING
+			)
+		);
 
 		if ( $existing_id ) {
 			// Update confidence and proposed value in case it improved.
-			$wpdb->update( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				'confidence'      => round( (float) ( $data['confidence'] ?? 0 ), 3 ),
-				'proposed_value'  => $data['proposed_value'] ?? '',
-				'reasoning'       => sanitize_textarea_field( $data['reasoning'] ?? '' ),
-			), array( 'id' => (int) $existing_id ) );
+			$wpdb->update(
+				$table,
+				array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				'confidence'     => round( (float) ( $data['confidence'] ?? 0 ), 3 ),
+				'proposed_value' => $data['proposed_value'] ?? '',
+				'reasoning'      => sanitize_textarea_field( $data['reasoning'] ?? '' ),
+				),
+				array( 'id' => (int) $existing_id )
+			);
 			return (int) $existing_id;
 		}
 
@@ -280,10 +296,10 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_decisions( array $args = array() ) {
 		global $wpdb;
 
-		$status  = $args['status'] ?? self::STATUS_PENDING;
-		$limit   = max( 1, min( 200, (int) ( $args['limit'] ?? 50 ) ) );
-		$offset  = max( 0, (int) ( $args['offset'] ?? 0 ) );
-		$where   = $wpdb->prepare( 'status = %s', $status );
+		$status = $args['status'] ?? self::STATUS_PENDING;
+		$limit  = max( 1, min( 200, (int) ( $args['limit'] ?? 50 ) ) );
+		$offset = max( 0, (int) ( $args['offset'] ?? 0 ) );
+		$where  = $wpdb->prepare( 'status = %s', $status );
 
 		if ( ! empty( $args['post_id'] ) ) {
 			$where .= $wpdb->prepare( ' AND post_id = %d', $args['post_id'] );
@@ -334,12 +350,14 @@ class SEO_Agent_AI_DB_Manager {
 		$today = gmdate( 'Y-m-d' );
 		$table = self::keyword_history_table();
 
-		$existing = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT id FROM {$table} WHERE post_id = %d AND keyword = %s AND recorded_at = %s LIMIT 1",
-			$post_id,
-			$keyword,
-			$today
-		) );
+		$existing = $wpdb->get_var(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT id FROM {$table} WHERE post_id = %d AND keyword = %s AND recorded_at = %s LIMIT 1",
+				$post_id,
+				$keyword,
+				$today
+			)
+		);
 
 		$row = array(
 			'position'    => isset( $data['position'] ) ? round( (float) $data['position'], 2 ) : null,
@@ -370,14 +388,17 @@ class SEO_Agent_AI_DB_Manager {
 		$table = self::keyword_history_table();
 		$since = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
 
-		return $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT keyword, position, impressions, clicks, ctr, recorded_at
+		return $wpdb->get_results(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT keyword, position, impressions, clicks, ctr, recorded_at
 			 FROM {$table}
 			 WHERE post_id = %d AND recorded_at >= %s
 			 ORDER BY recorded_at ASC, impressions DESC",
-			$post_id,
-			$since
-		), ARRAY_A ) ?: array();
+				$post_id,
+				$since
+			),
+			ARRAY_A
+		) ?: array();
 	}
 
 	// -------------------------------------------------------------------
@@ -394,20 +415,25 @@ class SEO_Agent_AI_DB_Manager {
 	public static function insert_page_insight( $post_id, array $scores, array $signals = array() ) {
 		global $wpdb;
 
-		$clamp = function( $v ) { return max( 0, min( 100, (int) $v ) ); };
+		$clamp = function ( $v ) {
+			return max( 0, min( 100, (int) $v ) );
+		};
 
-		$wpdb->insert( self::page_insights_table(), array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			'post_id'             => (int) $post_id,
-			'score_overall'       => $clamp( $scores['overall'] ?? 0 ),
-			'score_metadata'      => $clamp( $scores['metadata'] ?? 0 ),
-			'score_content'       => $clamp( $scores['content'] ?? 0 ),
-			'score_internal_links'=> $clamp( $scores['internal_links'] ?? 0 ),
-			'score_schema'        => $clamp( $scores['schema'] ?? 0 ),
-			'score_engagement'    => $clamp( $scores['engagement'] ?? 0 ),
-			'score_freshness'     => $clamp( $scores['freshness'] ?? 0 ),
-			'signal_data'         => wp_json_encode( $signals ),
-			'recorded_at'         => current_time( 'mysql', true ),
-		) );
+		$wpdb->insert(
+			self::page_insights_table(),
+			array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			'post_id'              => (int) $post_id,
+			'score_overall'        => $clamp( $scores['overall'] ?? 0 ),
+			'score_metadata'       => $clamp( $scores['metadata'] ?? 0 ),
+			'score_content'        => $clamp( $scores['content'] ?? 0 ),
+			'score_internal_links' => $clamp( $scores['internal_links'] ?? 0 ),
+			'score_schema'         => $clamp( $scores['schema'] ?? 0 ),
+			'score_engagement'     => $clamp( $scores['engagement'] ?? 0 ),
+			'score_freshness'      => $clamp( $scores['freshness'] ?? 0 ),
+			'signal_data'          => wp_json_encode( $signals ),
+			'recorded_at'          => current_time( 'mysql', true ),
+			)
+		);
 	}
 
 	/**
@@ -420,16 +446,20 @@ class SEO_Agent_AI_DB_Manager {
 	public static function upsert_page_insight( $post_id, array $score_data ) {
 		global $wpdb;
 
-		$clamp = function( $v ) { return max( 0, min( 100, (int) round( (float) $v ) ) ); };
+		$clamp = function ( $v ) {
+			return max( 0, min( 100, (int) round( (float) $v ) ) );
+		};
 		$dims  = isset( $score_data['dimensions'] ) && is_array( $score_data['dimensions'] ) ? $score_data['dimensions'] : array();
 		$today = gmdate( 'Y-m-d' );
 		$table = self::page_insights_table();
 
-		$existing = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT id FROM {$table} WHERE post_id = %d AND DATE(recorded_at) = %s LIMIT 1",
-			(int) $post_id,
-			$today
-		) );
+		$existing = $wpdb->get_var(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT id FROM {$table} WHERE post_id = %d AND DATE(recorded_at) = %s LIMIT 1",
+				(int) $post_id,
+				$today
+			)
+		);
 
 		$row = array(
 			'score_overall'        => $clamp( $score_data['overall'] ?? 0 ),
@@ -439,10 +469,12 @@ class SEO_Agent_AI_DB_Manager {
 			'score_schema'         => $clamp( $dims['schema'] ?? 0 ),
 			'score_engagement'     => $clamp( $dims['engagement'] ?? 0 ),
 			'score_freshness'      => $clamp( $dims['freshness'] ?? 0 ),
-			'signal_data'          => wp_json_encode( array(
-				'signals'      => $score_data['signals'] ?? array(),
-				'improvements' => $score_data['improvements'] ?? array(),
-			) ),
+			'signal_data'          => wp_json_encode(
+				array(
+					'signals'      => $score_data['signals'] ?? array(),
+					'improvements' => $score_data['improvements'] ?? array(),
+				)
+			),
 			'recorded_at'          => current_time( 'mysql', true ),
 		);
 
@@ -464,15 +496,19 @@ class SEO_Agent_AI_DB_Manager {
 		global $wpdb;
 		$table = self::page_insights_table();
 
-		$existing_id = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT id FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT 1",
-			(int) $post_id
-		) );
+		$existing_id = $wpdb->get_var(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT id FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT 1",
+				(int) $post_id
+			)
+		);
 
 		$engagement_score = self::calc_engagement_score( $item );
 
 		if ( ! $existing_id ) {
-			$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->insert(
+				$table,
+				array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				'post_id'              => (int) $post_id,
 				'score_overall'        => $engagement_score,
 				'score_metadata'       => 0,
@@ -483,13 +519,18 @@ class SEO_Agent_AI_DB_Manager {
 				'score_freshness'      => 0,
 				'signal_data'          => wp_json_encode( array( 'ga4' => $item ) ),
 				'recorded_at'          => current_time( 'mysql', true ),
-			) );
+				)
+			);
 			return;
 		}
 
-		$wpdb->update( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->update(
+			$table,
+			array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			'score_engagement' => $engagement_score,
-		), array( 'id' => (int) $existing_id ) );
+			),
+			array( 'id' => (int) $existing_id )
+		);
 	}
 
 	/**
@@ -525,10 +566,13 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_latest_insight( $post_id ) {
 		global $wpdb;
 		$table = self::page_insights_table();
-		$row   = $wpdb->get_row( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT * FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT 1",
-			$post_id
-		), ARRAY_A );
+		$row   = $wpdb->get_row(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT * FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT 1",
+				$post_id
+			),
+			ARRAY_A
+		);
 
 		if ( $row && ! empty( $row['signal_data'] ) ) {
 			$row['signal_data'] = json_decode( $row['signal_data'], true );
@@ -546,11 +590,14 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_insight_history( $post_id, $limit = 30 ) {
 		global $wpdb;
 		$table = self::page_insights_table();
-		return $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT * FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT %d",
-			$post_id,
-			$limit
-		), ARRAY_A ) ?: array();
+		return $wpdb->get_results(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT * FROM {$table} WHERE post_id = %d ORDER BY recorded_at DESC LIMIT %d",
+				$post_id,
+				$limit
+			),
+			ARRAY_A
+		) ?: array();
 	}
 
 	// -------------------------------------------------------------------
@@ -578,10 +625,12 @@ class SEO_Agent_AI_DB_Manager {
 			'created_at'             => current_time( 'mysql', true ),
 		);
 
-		$existing = $wpdb->get_var( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT id FROM {$table} WHERE report_date = %s LIMIT 1",
-			$date
-		) );
+		$existing = $wpdb->get_var(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT id FROM {$table} WHERE report_date = %s LIMIT 1",
+				$date
+			)
+		);
 
 		if ( $existing ) {
 			unset( $row['created_at'] ); // Don't overwrite creation timestamp.
@@ -601,10 +650,13 @@ class SEO_Agent_AI_DB_Manager {
 		global $wpdb;
 		$date  = $date ?: gmdate( 'Y-m-d' );
 		$table = self::daily_reports_table();
-		$row   = $wpdb->get_row( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT * FROM {$table} WHERE report_date = %s LIMIT 1",
-			$date
-		), ARRAY_A );
+		$row   = $wpdb->get_row(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT * FROM {$table} WHERE report_date = %s LIMIT 1",
+				$date
+			),
+			ARRAY_A
+		);
 
 		if ( $row && ! empty( $row['report_data'] ) ) {
 			$row['report_data'] = json_decode( $row['report_data'], true );
@@ -621,10 +673,12 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_report_dates( $limit = 30 ) {
 		global $wpdb;
 		$table = self::daily_reports_table();
-		return $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT report_date FROM {$table} ORDER BY report_date DESC LIMIT %d",
-			$limit
-		) ) ?: array();
+		return $wpdb->get_col(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT report_date FROM {$table} ORDER BY report_date DESC LIMIT %d",
+				$limit
+			)
+		) ?: array();
 	}
 
 	// -------------------------------------------------------------------
@@ -644,15 +698,18 @@ class SEO_Agent_AI_DB_Manager {
 	public static function insert_internal_link( $source_post_id, $target_post_id, $anchor_text, $context_snippet = '', $added_by = 'plugin' ) {
 		global $wpdb;
 
-		$result = $wpdb->insert( self::internal_links_table(), array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			'source_post_id' => (int) $source_post_id,
-			'target_post_id' => (int) $target_post_id,
-			'anchor_text'    => sanitize_text_field( $anchor_text ),
-			'context_snippet'=> sanitize_textarea_field( $context_snippet ),
-			'added_by'       => sanitize_text_field( $added_by ),
-			'added_at'       => current_time( 'mysql', true ),
-			'status'         => 'active',
-		) );
+		$result = $wpdb->insert(
+			self::internal_links_table(),
+			array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			'source_post_id'  => (int) $source_post_id,
+			'target_post_id'  => (int) $target_post_id,
+			'anchor_text'     => sanitize_text_field( $anchor_text ),
+			'context_snippet' => sanitize_textarea_field( $context_snippet ),
+			'added_by'        => sanitize_text_field( $added_by ),
+			'added_at'        => current_time( 'mysql', true ),
+			'status'          => 'active',
+			)
+		);
 
 		return $result ? (int) $wpdb->insert_id : false;
 	}
@@ -705,10 +762,12 @@ class SEO_Agent_AI_DB_Manager {
 		global $wpdb;
 		$cutoff = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
 		$table  = self::keyword_history_table();
-		$wpdb->query( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"DELETE FROM {$table} WHERE recorded_at < %s",
-			$cutoff
-		) );
+		$wpdb->query(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"DELETE FROM {$table} WHERE recorded_at < %s",
+				$cutoff
+			)
+		);
 	}
 
 	/**
@@ -720,8 +779,9 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_all_latest_insights( $limit = 200 ) {
 		global $wpdb;
 		$table = self::page_insights_table();
-		$rows  = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT pi.* FROM {$table} pi
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT pi.* FROM {$table} pi
 			 INNER JOIN (
 			     SELECT post_id, MAX(recorded_at) AS max_at
 			     FROM {$table}
@@ -729,8 +789,10 @@ class SEO_Agent_AI_DB_Manager {
 			 ) latest ON pi.post_id = latest.post_id AND pi.recorded_at = latest.max_at
 			 ORDER BY pi.post_id
 			 LIMIT %d",
-			(int) $limit
-		), ARRAY_A );
+				(int) $limit
+			),
+			ARRAY_A
+		);
 		return is_array( $rows ) ? $rows : array();
 	}
 
@@ -745,8 +807,9 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_posts_below_score_threshold( $threshold = 70, $limit = 30 ) {
 		global $wpdb;
 		$table = self::page_insights_table();
-		$rows  = $wpdb->get_col( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT pi.post_id
+		$rows  = $wpdb->get_col(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT pi.post_id
 			 FROM {$table} pi
 			 INNER JOIN (
 			     SELECT post_id, MAX(recorded_at) AS max_at
@@ -756,9 +819,10 @@ class SEO_Agent_AI_DB_Manager {
 			 WHERE pi.score_overall < %d
 			 ORDER BY pi.score_overall ASC
 			 LIMIT %d",
-			max( 0, min( 100, (int) $threshold ) ),
-			max( 1, (int) $limit )
-		) );
+				max( 0, min( 100, (int) $threshold ) ),
+				max( 1, (int) $limit )
+			)
+		);
 		return array_map( 'intval', is_array( $rows ) ? $rows : array() );
 	}
 
@@ -772,11 +836,14 @@ class SEO_Agent_AI_DB_Manager {
 	public static function get_activity_for_range( $date_from, $date_to ) {
 		global $wpdb;
 		$table = SEO_Agent_AI_Activity_Log::get_table_name();
-		$rows  = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
-			"SELECT * FROM {$table} WHERE created_at >= %s AND created_at <= %s ORDER BY created_at DESC LIMIT 500",
-			$date_from,
-			$date_to
-		), ARRAY_A );
+		$rows  = $wpdb->get_results(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL
+				"SELECT * FROM {$table} WHERE created_at >= %s AND created_at <= %s ORDER BY created_at DESC LIMIT 500",
+				$date_from,
+				$date_to
+			),
+			ARRAY_A
+		);
 		return is_array( $rows ) ? $rows : array();
 	}
 
@@ -809,8 +876,8 @@ class SEO_Agent_AI_DB_Manager {
 	 */
 	private static function calc_engagement_score( array $item ) {
 		$engagement_rate = (float) ( $item['engagement_rate'] ?? 0.0 );
-		$avg_time        = (int)   ( $item['avg_time_sec']    ?? 0 );
-		$bounce_rate     = (float) ( $item['bounce_rate']     ?? 1.0 );
+		$avg_time        = (int) ( $item['avg_time_sec'] ?? 0 );
+		$bounce_rate     = (float) ( $item['bounce_rate'] ?? 1.0 );
 
 		// engagement_rate 0-1 → 0-50 pts.
 		$score = $engagement_rate * 50.0;

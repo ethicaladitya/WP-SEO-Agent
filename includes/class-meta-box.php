@@ -17,7 +17,7 @@ class SEO_Agent_AI_Meta_Box {
 
 	public function init_hooks() {
 		add_action( 'add_meta_boxes', array( $this, 'register_meta_boxes' ) );
-		add_action( 'save_post',      array( $this, 'save_meta_box' ), 10, 2 );
+		add_action( 'save_post', array( $this, 'save_meta_box' ), 10, 2 );
 		add_action( 'wp_ajax_seo_agent_ai_analyze_single_post', array( $this, 'ajax_analyze_single_post' ) );
 	}
 
@@ -51,18 +51,18 @@ class SEO_Agent_AI_Meta_Box {
 		wp_nonce_field( 'seo_agent_ai_meta_box_' . $post->ID, 'seo_agent_ai_meta_box_nonce' );
 
 		// Read stored values.
-		$score         = (int) get_post_meta( $post->ID, '_seo_agent_ai_score',            true );
-		$keyword       = (string) get_post_meta( $post->ID, '_seo_agent_ai_focus_keyword',   true );
-		$last_analyzed = (string) get_post_meta( $post->ID, '_seo_agent_ai_last_analyzed',   true );
-		$custom_title  = (string) get_post_meta( $post->ID, '_seo_agent_ai_custom_title',    true );
+		$score         = (int) get_post_meta( $post->ID, '_seo_agent_ai_score', true );
+		$keyword       = (string) get_post_meta( $post->ID, '_seo_agent_ai_focus_keyword', true );
+		$last_analyzed = (string) get_post_meta( $post->ID, '_seo_agent_ai_last_analyzed', true );
+		$custom_title  = (string) get_post_meta( $post->ID, '_seo_agent_ai_custom_title', true );
 		$custom_desc   = (string) get_post_meta( $post->ID, '_seo_agent_ai_custom_description', true );
-		$canonical     = (string) get_post_meta( $post->ID, '_seo_agent_ai_canonical',       true );
-		$noindex       = (bool) get_post_meta( $post->ID, '_seo_agent_ai_robots_noindex',   true );
-		$nofollow      = (bool) get_post_meta( $post->ID, '_seo_agent_ai_robots_nofollow',  true );
+		$canonical     = (string) get_post_meta( $post->ID, '_seo_agent_ai_canonical', true );
+		$noindex       = (bool) get_post_meta( $post->ID, '_seo_agent_ai_robots_noindex', true );
+		$nofollow      = (bool) get_post_meta( $post->ID, '_seo_agent_ai_robots_nofollow', true );
 		$noarchive     = (bool) get_post_meta( $post->ID, '_seo_agent_ai_robots_noarchive', true );
 		$nosnippet     = (bool) get_post_meta( $post->ID, '_seo_agent_ai_robots_nosnippet', true );
-		$og_title      = (string) get_post_meta( $post->ID, '_seo_agent_ai_og_title',        true );
-		$og_desc       = (string) get_post_meta( $post->ID, '_seo_agent_ai_og_description',  true );
+		$og_title      = (string) get_post_meta( $post->ID, '_seo_agent_ai_og_title', true );
+		$og_desc       = (string) get_post_meta( $post->ID, '_seo_agent_ai_og_description', true );
 
 		// Score badge colour.
 		if ( $score >= 70 ) {
@@ -226,10 +226,10 @@ class SEO_Agent_AI_Meta_Box {
 		}
 
 		$text_fields = array(
-			'seo_agent_ai_focus_keyword'    => '_seo_agent_ai_focus_keyword',
-			'seo_agent_ai_custom_title'     => '_seo_agent_ai_custom_title',
-			'seo_agent_ai_canonical'        => '_seo_agent_ai_canonical',
-			'seo_agent_ai_og_title'         => '_seo_agent_ai_og_title',
+			'seo_agent_ai_focus_keyword' => '_seo_agent_ai_focus_keyword',
+			'seo_agent_ai_custom_title'  => '_seo_agent_ai_custom_title',
+			'seo_agent_ai_canonical'     => '_seo_agent_ai_canonical',
+			'seo_agent_ai_og_title'      => '_seo_agent_ai_og_title',
 		);
 
 		foreach ( $text_fields as $field => $meta_key ) {
@@ -294,10 +294,12 @@ class SEO_Agent_AI_Meta_Box {
 			}
 		}
 
-		wp_send_json_success( array(
-			'score'                => $score,
-			'recommendations_count' => $recs,
-			'top_issues'           => $top_issues,
-		) );
+		wp_send_json_success(
+			array(
+				'score'                 => $score,
+				'recommendations_count' => $recs,
+				'top_issues'            => $top_issues,
+			)
+		);
 	}
 }

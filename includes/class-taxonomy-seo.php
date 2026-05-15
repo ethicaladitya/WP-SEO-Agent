@@ -21,12 +21,12 @@ class SEO_Agent_AI_Taxonomy_SEO {
 	public function init_hooks() {
 		foreach ( $this->taxonomies as $taxonomy ) {
 			add_action( $taxonomy . '_edit_form_fields', array( $this, 'render_term_fields' ), 10, 1 );
-			add_action( 'edited_' . $taxonomy,           array( $this, 'save_term_meta' ),     10, 1 );
+			add_action( 'edited_' . $taxonomy, array( $this, 'save_term_meta' ), 10, 1 );
 		}
 
 		// Output meta on term archive pages (priority 2 — after Social Meta at priority 1).
-		add_action( 'wp_head', array( $this, 'output_term_meta' ),     2 );
-		add_action( 'wp_head', array( $this, 'init_homepage_meta' ),   3 );
+		add_action( 'wp_head', array( $this, 'output_term_meta' ), 2 );
+		add_action( 'wp_head', array( $this, 'init_homepage_meta' ), 3 );
 	}
 
 	// -------------------------------------------------------------------
@@ -41,9 +41,9 @@ class SEO_Agent_AI_Taxonomy_SEO {
 	public function render_term_fields( WP_Term $term ) {
 		wp_nonce_field( 'seo_agent_ai_term_' . $term->term_id, 'seo_agent_ai_term_nonce' );
 
-		$seo_title = (string) get_term_meta( $term->term_id, '_seo_agent_ai_term_title',       true );
+		$seo_title = (string) get_term_meta( $term->term_id, '_seo_agent_ai_term_title', true );
 		$seo_desc  = (string) get_term_meta( $term->term_id, '_seo_agent_ai_term_description', true );
-		$noindex   = (bool)   get_term_meta( $term->term_id, '_seo_agent_ai_term_noindex',     true );
+		$noindex   = (bool) get_term_meta( $term->term_id, '_seo_agent_ai_term_noindex', true );
 		?>
 		<tr class="form-field">
 			<th scope="row">
@@ -126,9 +126,9 @@ class SEO_Agent_AI_Taxonomy_SEO {
 			return;
 		}
 
-		$seo_title = (string) get_term_meta( $term->term_id, '_seo_agent_ai_term_title',       true );
+		$seo_title = (string) get_term_meta( $term->term_id, '_seo_agent_ai_term_title', true );
 		$seo_desc  = (string) get_term_meta( $term->term_id, '_seo_agent_ai_term_description', true );
-		$noindex   = (bool)   get_term_meta( $term->term_id, '_seo_agent_ai_term_noindex',     true );
+		$noindex   = (bool) get_term_meta( $term->term_id, '_seo_agent_ai_term_noindex', true );
 
 		if ( $seo_title ) {
 			echo '<title>' . esc_html( $seo_title ) . '</title>' . "\n";
@@ -151,7 +151,7 @@ class SEO_Agent_AI_Taxonomy_SEO {
 			return;
 		}
 
-		$title = (string) get_option( 'seo_agent_ai_homepage_title',       '' );
+		$title = (string) get_option( 'seo_agent_ai_homepage_title', '' );
 		$desc  = (string) get_option( 'seo_agent_ai_homepage_description', '' );
 
 		if ( $title ) {

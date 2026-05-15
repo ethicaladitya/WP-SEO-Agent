@@ -23,7 +23,7 @@ class SEO_Agent_AI_Redirect_Manager {
 
 	public function init_hooks() {
 		add_action( 'template_redirect', array( $this, 'process_redirects' ), 1 );
-		add_action( 'wp',                array( $this, 'init_404_logging' ) );
+		add_action( 'wp', array( $this, 'init_404_logging' ) );
 	}
 
 	// -------------------------------------------------------------------
@@ -36,7 +36,8 @@ class SEO_Agent_AI_Redirect_Manager {
 
 		$cc = $wpdb->get_charset_collate();
 
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_REDIRECTS . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_REDIRECTS . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			source_url varchar(500) NOT NULL DEFAULT '',
 			target_url varchar(500) NOT NULL DEFAULT '',
@@ -47,9 +48,11 @@ class SEO_Agent_AI_Redirect_Manager {
 			notes varchar(500) DEFAULT '',
 			PRIMARY KEY  (id),
 			KEY source_url (source_url(191))
-		) $cc;" );
+		) $cc;"
+		);
 
-		dbDelta( "CREATE TABLE {$wpdb->prefix}" . self::TABLE_404_LOG . " (
+		dbDelta(
+			"CREATE TABLE {$wpdb->prefix}" . self::TABLE_404_LOG . " (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			url varchar(500) NOT NULL DEFAULT '',
 			referrer varchar(500) DEFAULT NULL,
@@ -59,7 +62,8 @@ class SEO_Agent_AI_Redirect_Manager {
 			redirect_created tinyint(1) NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			UNIQUE KEY url (url(191))
-		) $cc;" );
+		) $cc;"
+		);
 	}
 
 	// -------------------------------------------------------------------
@@ -75,16 +79,18 @@ class SEO_Agent_AI_Redirect_Manager {
 	public function log_404( $url, $referrer = '' ) {
 		global $wpdb;
 
-		$table   = $wpdb->prefix . self::TABLE_404_LOG;
-		$url     = substr( sanitize_text_field( $url ), 0, 500 );
-		$ref     = $referrer ? substr( sanitize_text_field( $referrer ), 0, 500 ) : null;
-		$now     = current_time( 'mysql' );
+		$table = $wpdb->prefix . self::TABLE_404_LOG;
+		$url   = substr( sanitize_text_field( $url ), 0, 500 );
+		$ref   = $referrer ? substr( sanitize_text_field( $referrer ), 0, 500 ) : null;
+		$now   = current_time( 'mysql' );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$existing = $wpdb->get_row( $wpdb->prepare(
-			"SELECT id, hit_count FROM `{$table}` WHERE url = %s LIMIT 1",
-			$url
-		) );
+		$existing = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id, hit_count FROM `{$table}` WHERE url = %s LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$url
+			)
+		);
 
 		if ( $existing ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -127,11 +133,14 @@ class SEO_Agent_AI_Redirect_Manager {
 		$table = $wpdb->prefix . self::TABLE_404_LOG;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		return $wpdb->get_results( $wpdb->prepare(
-			"SELECT * FROM `{$table}` ORDER BY hit_count DESC LIMIT %d OFFSET %d",
-			(int) $limit,
-			(int) $offset
-		), ARRAY_A );
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM `{$table}` ORDER BY hit_count DESC LIMIT %d OFFSET %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				(int) $limit,
+				(int) $offset
+			),
+			ARRAY_A
+		);
 	}
 
 	// -------------------------------------------------------------------
@@ -189,11 +198,14 @@ class SEO_Agent_AI_Redirect_Manager {
 		$table = $wpdb->prefix . self::TABLE_REDIRECTS;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		return $wpdb->get_results( $wpdb->prepare(
-			"SELECT * FROM `{$table}` ORDER BY created_at DESC LIMIT %d OFFSET %d",
-			(int) $limit,
-			(int) $offset
-		), ARRAY_A );
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM `{$table}` ORDER BY created_at DESC LIMIT %d OFFSET %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				(int) $limit,
+				(int) $offset
+			),
+			ARRAY_A
+		);
 	}
 
 	/**
@@ -235,8 +247,8 @@ class SEO_Agent_AI_Redirect_Manager {
 		if ( false === $redirects ) {
 			$table = $wpdb->prefix . self::TABLE_REDIRECTS;
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$redirects = $wpdb->get_results(
-				"SELECT id, source_url, target_url, redirect_type FROM `{$table}` ORDER BY id ASC",
+			$redirects = $wpdb->get_results( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				"SELECT id, source_url, target_url, redirect_type FROM `{$table}` ORDER BY id ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				ARRAY_A
 			);
 			set_transient( self::REDIRECT_CACHE_KEY, $redirects, self::REDIRECT_CACHE_TTL );
@@ -257,13 +269,15 @@ class SEO_Agent_AI_Redirect_Manager {
 				// Update hit count asynchronously (best-effort).
 				$table = $wpdb->prefix . self::TABLE_REDIRECTS;
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-				$wpdb->query( $wpdb->prepare(
-					"UPDATE `{$table}` SET hit_count = hit_count + 1, last_hit = %s WHERE id = %d",
-					current_time( 'mysql' ),
-					(int) $redirect['id']
-				) );
+				$wpdb->query(
+					$wpdb->prepare(
+						"UPDATE `{$table}` SET hit_count = hit_count + 1, last_hit = %s WHERE id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+						current_time( 'mysql' ),
+						(int) $redirect['id']
+					)
+				);
 
-				wp_redirect( esc_url_raw( $redirect['target_url'] ), (int) $redirect['redirect_type'] );
+				wp_safe_redirect( esc_url_raw( $redirect['target_url'] ), (int) $redirect['redirect_type'] );
 				exit;
 			}
 		}
@@ -303,11 +317,11 @@ class SEO_Agent_AI_Redirect_Manager {
 		$l_table = $wpdb->prefix . self::TABLE_404_LOG;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$total_redirects  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$r_table}`" );
+		$total_redirects = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$r_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$total_404s       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$l_table}`" );
+		$total_404s = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$l_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$unresolved_404s  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$l_table}` WHERE redirect_created = 0" );
+		$unresolved_404s = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$l_table}` WHERE redirect_created = 0" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		return compact( 'total_redirects', 'total_404s', 'unresolved_404s' );
 	}
