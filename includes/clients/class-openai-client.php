@@ -26,9 +26,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class SEO_Agent_AI_OpenAI_Client {
 
-	const OPTION_API_KEY  = 'seo_agent_ai_openai_api_key';
-	const OPTION_BASE_URL = 'seo_agent_ai_openai_base_url';
-	const OPTION_MODEL    = 'seo_agent_ai_openai_model';
+	const OPTION_API_KEY      = 'seo_agent_ai_openai_api_key';
+	const OPTION_BASE_URL     = 'seo_agent_ai_openai_base_url';
+	const OPTION_MODEL        = 'seo_agent_ai_openai_model';
+	const OPTION_API_VERSION  = 'seo_agent_ai_openai_api_version';
+
+	// Azure legacy GA api-version (2024-02-01 was retired 2025-03-31).
+	const AZURE_LEGACY_API_VERSION  = '2024-10-21';
+	const AZURE_FOUNDRY_API_VERSION = '2025-01-01';
 
 	const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 	const DEFAULT_MODEL    = 'gpt-4o-mini';
@@ -431,19 +436,39 @@ class SEO_Agent_AI_OpenAI_Client {
 	 *
 	 * - Azure AI Foundry  → {base_url}/chat/completions?api-version=2025-01-01
 	 * - Azure /openai/v1  → {base_url}/chat/completions  (no api-version)
-	 * - Azure legacy      → {base_url}/chat/completions?api-version=2024-02-01
+	 * - Azure legacy      → {base_url}/chat/completions?api-version=<configured|2024-10-21>
 	 * - Standard/custom   → {base_url}/chat/completions
+	 *
+	 * The Azure legacy api-version can be overridden via the
+	 * seo_agent_ai_openai_api_version option or the
+	 * SEO_AGENT_AI_OPENAI_API_VERSION constant (useful when Azure retires a version).
 	 */
 	private function build_endpoint() {
 		if ( $this->is_azure_foundry ) {
-			return $this->base_url . '/chat/completions?api-version=2025-01-01';
+			return $this->base_url . '/chat/completions?api-version=' . self::AZURE_FOUNDRY_API_VERSION;
 		}
 		if ( $this->is_azure && ! $this->is_azure_v1 ) {
-			// Legacy deployment-specific Azure format requires api-version.
-			return $this->base_url . '/chat/completions?api-version=2024-02-01';
+			$api_version = $this->resolve_azure_api_version();
+			return $this->base_url . '/chat/completions?api-version=' . rawurlencode( $api_version );
 		}
 		// OpenAI format (standard, custom, and Azure /openai/v1).
 		return $this->base_url . '/chat/completions';
+	}
+
+	/**
+	 * Resolve the Azure legacy api-version, with constant → option → default fallback.
+	 *
+	 * @return string
+	 */
+	private function resolve_azure_api_version() {
+		if ( defined( 'SEO_AGENT_AI_OPENAI_API_VERSION' ) ) {
+			$v = trim( (string) constant( 'SEO_AGENT_AI_OPENAI_API_VERSION' ) );
+			if ( $v !== '' ) {
+				return $v;
+			}
+		}
+		$stored = trim( (string) get_option( self::OPTION_API_VERSION, '' ) );
+		return $stored !== '' ? $stored : self::AZURE_LEGACY_API_VERSION;
 	}
 
 	/**
