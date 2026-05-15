@@ -168,6 +168,8 @@ class SEO_Agent_AI_Plugin {
 		$pending_approvals_page = new SEO_Agent_AI_Pending_Approvals_Page( $this->decision_engine, $this->fix_executor, $this->internal_link_engine );
 		$rollback_center_page   = new SEO_Agent_AI_Rollback_Center_Page( $this->fix_executor, $this->activity_log );
 		$cron_status_page       = new SEO_Agent_AI_Cron_Status_Page();
+		$image_seo_page         = new SEO_Agent_AI_Image_SEO_Page( $this->image_seo );
+		$redirects_page         = new SEO_Agent_AI_Redirects_Page( $this->redirect_manager );
 
 		$this->admin_page = new SEO_Agent_AI_Admin_Page(
 			$this->data_store,
@@ -180,7 +182,9 @@ class SEO_Agent_AI_Plugin {
 			$rankings_page,
 			$pending_approvals_page,
 			$rollback_center_page,
-			$cron_status_page
+			$cron_status_page,
+			$image_seo_page,
+			$redirects_page
 		);
 
 		// Admin hooks.
@@ -197,6 +201,7 @@ class SEO_Agent_AI_Plugin {
 		add_action( 'admin_post_seo_agent_ai_decision', array( $pending_approvals_page, 'handle_action' ) );
 		add_action( 'admin_post_seo_agent_ai_rollback_new', array( $rollback_center_page, 'handle_rollback' ) );
 		add_action( 'admin_post_seo_agent_ai_trigger_cron', array( $cron_status_page, 'handle_trigger' ) );
+		add_action( 'admin_post_seo_agent_ai_manage_redirect', array( $redirects_page, 'handle_action' ) );
 
 		// OAuth callback — must run before page output.
 		add_action( 'admin_init', array( $this, 'maybe_handle_oauth_callback' ) );
@@ -495,21 +500,16 @@ class SEO_Agent_AI_Plugin {
 		$since = gmdate( 'Y-m-d', strtotime( '-28 days' ) );
 
 		// Aggregate impressions per (post_id, keyword) over the last 28 days.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$rows = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT post_id, keyword,
-			        SUM(impressions) AS total_impressions,
-			        AVG(position) AS avg_position
-			 FROM {$table}
-			 WHERE recorded_at >= %s AND impressions > 0
-			 GROUP BY post_id, keyword
-			 HAVING total_impressions >= 20
-			 ORDER BY keyword, total_impressions DESC",
-				$since
-			),
-			ARRAY_A
-		);
+		$sql = 'SELECT post_id, keyword,
+		        SUM(impressions) AS total_impressions,
+		        AVG(position) AS avg_position
+		 FROM ' . $table . '
+		 WHERE recorded_at >= %s AND impressions > 0
+		 GROUP BY post_id, keyword
+		 HAVING total_impressions >= 20
+		 ORDER BY keyword, total_impressions DESC';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $since ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		if ( empty( $rows ) ) {
 			$this->logger->info( 'No keyword history data for cannibalization check.' );

@@ -51,6 +51,12 @@ class SEO_Agent_AI_Admin_Page {
 	/** @var SEO_Agent_AI_Cron_Status_Page */
 	private $cron_status_page;
 
+	/** @var SEO_Agent_AI_Image_SEO_Page */
+	private $image_seo_page;
+
+	/** @var SEO_Agent_AI_Redirects_Page */
+	private $redirects_page;
+
 	public function __construct(
 		SEO_Agent_AI_Data_Store $data_store,
 		SEO_Agent_AI_Connect_Page $connect_page,
@@ -62,7 +68,9 @@ class SEO_Agent_AI_Admin_Page {
 		SEO_Agent_AI_Rankings_Page $rankings_page,
 		SEO_Agent_AI_Pending_Approvals_Page $pending_approvals_page,
 		SEO_Agent_AI_Rollback_Center_Page $rollback_center_page,
-		SEO_Agent_AI_Cron_Status_Page $cron_status_page
+		SEO_Agent_AI_Cron_Status_Page $cron_status_page,
+		SEO_Agent_AI_Image_SEO_Page $image_seo_page,
+		SEO_Agent_AI_Redirects_Page $redirects_page
 	) {
 		$this->data_store             = $data_store;
 		$this->connect_page           = $connect_page;
@@ -75,6 +83,8 @@ class SEO_Agent_AI_Admin_Page {
 		$this->pending_approvals_page = $pending_approvals_page;
 		$this->rollback_center_page   = $rollback_center_page;
 		$this->cron_status_page       = $cron_status_page;
+		$this->image_seo_page         = $image_seo_page;
+		$this->redirects_page         = $redirects_page;
 	}
 
 	// -------------------------------------------------------------------
@@ -155,6 +165,24 @@ class SEO_Agent_AI_Admin_Page {
 			'manage_options',
 			'seo-agent-rollback',
 			array( $this->rollback_center_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Image SEO', 'seo-agent-ai' ),
+			__( 'Image SEO', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-image-seo',
+			array( $this->image_seo_page, 'render' )
+		);
+
+		add_submenu_page(
+			'seo-agent-ai',
+			__( 'Redirects & 404s', 'seo-agent-ai' ),
+			__( 'Redirects & 404s', 'seo-agent-ai' ),
+			'manage_options',
+			'seo-agent-redirects',
+			array( $this->redirects_page, 'render' )
 		);
 
 		add_submenu_page(
@@ -962,15 +990,15 @@ class SEO_Agent_AI_Admin_Page {
 	private function render_notice( $notice ) {
 		$map = array(
 			'analysis_complete'        => array( 'success', __( 'Analysis completed.', 'seo-agent-ai' ) ),
-			'analysis_scheduled'       => array( 'info',    __( 'Analysis scheduled. WP-Cron will run it shortly; reload this page in a minute or two for results.', 'seo-agent-ai' ) ),
+			'analysis_scheduled'       => array( 'info', __( 'Analysis scheduled. WP-Cron will run it shortly; reload this page in a minute or two for results.', 'seo-agent-ai' ) ),
 			'fix_applied'              => array( 'success', __( 'Safe metadata fix applied.', 'seo-agent-ai' ) ),
-			'apply_failed'             => array( 'error',   __( 'Could not apply fix. Check recommendation risk and payload.', 'seo-agent-ai' ) ),
-			'invalid_input'            => array( 'error',   __( 'Invalid input provided.', 'seo-agent-ai' ) ),
-			'recommendation_not_found' => array( 'error',   __( 'Recommendation no longer exists.', 'seo-agent-ai' ) ),
+			'apply_failed'             => array( 'error', __( 'Could not apply fix. Check recommendation risk and payload.', 'seo-agent-ai' ) ),
+			'invalid_input'            => array( 'error', __( 'Invalid input provided.', 'seo-agent-ai' ) ),
+			'recommendation_not_found' => array( 'error', __( 'Recommendation no longer exists.', 'seo-agent-ai' ) ),
 			'settings_saved'           => array( 'success', __( 'Settings saved.', 'seo-agent-ai' ) ),
-			'connection_tested'        => array( 'info',    __( 'Connection test completed. See results below.', 'seo-agent-ai' ) ),
+			'connection_tested'        => array( 'info', __( 'Connection test completed. See results below.', 'seo-agent-ai' ) ),
 			'rollback_done'            => array( 'success', __( 'Rollback applied. Previous metadata restored.', 'seo-agent-ai' ) ),
-			'rollback_failed'          => array( 'error',   __( 'Rollback failed. No backup found for this post.', 'seo-agent-ai' ) ),
+			'rollback_failed'          => array( 'error', __( 'Rollback failed. No backup found for this post.', 'seo-agent-ai' ) ),
 			'google_disconnected'      => array( 'success', __( 'Google account disconnected.', 'seo-agent-ai' ) ),
 			'google_connected'         => array( 'success', __( 'Google account connected.', 'seo-agent-ai' ) ),
 		);

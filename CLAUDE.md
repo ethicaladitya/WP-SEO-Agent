@@ -7,8 +7,9 @@
 
 ## Server
 - **Host:** `aditya@iadityame.tempurl.host`
-- **Plugin path on server:** `/path/to/wp-content/plugins/seo-agent-ai` *(update this once confirmed)*
+- **Plugin path on server:** `~/site/public_html/wp-content/plugins/seo-agent-ai`
 - **WP-CLI available:** yes
+- **Note:** Server is IPv6-only — SSH must be run from the user's own machine, not from this Claude Code sandbox.
 
 ---
 
