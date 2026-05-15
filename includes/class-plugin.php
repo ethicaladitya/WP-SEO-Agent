@@ -1117,6 +1117,64 @@ class SEO_Agent_AI_Plugin {
 	// -------------------------------------------------------------------
 	// Manual "Approve & Apply" handler
 	// -------------------------------------------------------------------
+	// Autopilot: drain existing pending decisions
+	// -------------------------------------------------------------------
+
+	private function drain_pending_decisions() {
+		$pending = SEO_Agent_AI_DB_Manager::get_decisions(
+			array(
+				'status' => SEO_Agent_AI_DB_Manager::STATUS_PENDING,
+				'limit'  => 500,
+			)
+		);
+
+		foreach ( $pending as $dec ) {
+			$dec_id  = (int) $dec['id'];
+			$post_id = (int) $dec['post_id'];
+			$type    = $dec['decision_type'] ?? '';
+			$field   = $dec['field'] ?? '';
+			$value   = $dec['proposed_value'] ?? '';
+
+			$proposed = array();
+			if ( $field === 'meta_title' ) {
+				$proposed['meta_title'] = $value;
+			} elseif ( $field === 'meta_description' ) {
+				$proposed['meta_description'] = $value;
+			} else {
+				$decoded = json_decode( $value, true );
+				if ( is_array( $decoded ) ) {
+					$proposed = $decoded;
+				}
+			}
+
+			if ( ! empty( $proposed ) ) {
+				$result = $this->fix_executor->apply(
+					$post_id,
+					array(
+						'type'       => $type,
+						'risk'       => 'safe',
+						'proposed'   => $proposed,
+						'reason'     => $dec['reasoning'] ?? '',
+						'confidence' => (float) ( $dec['confidence'] ?? 0.7 ),
+					),
+					'autopilot'
+				);
+				if ( ! is_wp_error( $result ) ) {
+					$this->decision_engine->mark_applied( $dec_id );
+				}
+			} elseif ( $type === 'internal_link_needed' ) {
+				$this->internal_link_engine->run_for_post( $post_id );
+				$this->decision_engine->mark_applied( $dec_id );
+			} elseif ( $type === 'schema_update' ) {
+				update_post_meta( $post_id, '_seo_agent_ai_schema_approved', 1 );
+				$this->decision_engine->mark_applied( $dec_id );
+			}
+		}
+
+		$this->logger->info( sprintf( 'Autopilot drain: processed %d pending decisions.', count( $pending ) ) );
+	}
+
+	// -------------------------------------------------------------------
 
 	public function handle_apply_fix() {
 		if ( ! current_user_can( 'edit_posts' ) ) {
@@ -1283,7 +1341,14 @@ class SEO_Agent_AI_Plugin {
 
 		update_option( SEO_Agent_AI_GSC_Client::OPTION_GSC_SITE_URL, $gsc_site_url, false );
 		update_option( SEO_Agent_AI_GA4_Client::OPTION_GA4_PROPERTY_ID, $ga4_property, false );
+		$was_autopilot = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
 		update_option( 'seo_agent_ai_autopilot_enabled', $autopilot, false );
+
+		// If autopilot was just switched ON, immediately drain the pending queue.
+		if ( $autopilot && ! $was_autopilot ) {
+			$this->drain_pending_decisions();
+		}
+
 		update_option( 'seo_agent_ai_autopilot_max_daily', $max_daily, false );
 		update_option( 'seo_agent_ai_autopilot_min_confidence', $min_conf, false );
 		update_option( 'seo_agent_ai_log_retention_days', $log_retention, false );

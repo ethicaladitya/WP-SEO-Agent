@@ -282,12 +282,20 @@ class SEO_Agent_AI_Image_SEO {
 		);
 
 		$provider = get_option( 'seo_agent_ai_ai_provider', 'gemini' );
-		$alt_text = '';
 
+		// Try primary provider, automatically fall back to the other if it fails.
 		if ( $provider === 'openai' ) {
 			$result = $this->openai->complete( $prompt );
+			if ( is_wp_error( $result ) && $this->gemini->is_configured() ) {
+				$this->logger->warning( 'OpenAI alt text failed for #' . $attachment_id . ', falling back to Gemini.' );
+				$result = $this->gemini->complete( $prompt );
+			}
 		} else {
 			$result = $this->gemini->complete( $prompt );
+			if ( is_wp_error( $result ) && $this->openai->is_configured() ) {
+				$this->logger->warning( 'Gemini alt text failed for #' . $attachment_id . ', falling back to OpenAI.' );
+				$result = $this->openai->complete( $prompt );
+			}
 		}
 
 		if ( is_wp_error( $result ) ) {

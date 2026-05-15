@@ -53,7 +53,8 @@ class SEO_Agent_AI_Fix_Executor {
 		$reason     = isset( $recommendation['reason'] ) ? (string) $recommendation['reason'] : '';
 		$confidence = isset( $recommendation['confidence'] ) ? (float) $recommendation['confidence'] : 0.0;
 
-		if ( $risk !== 'safe' ) {
+		// When autopilot is fully enabled, allow risky recommendations too (agent mode).
+		if ( $risk !== 'safe' && ! (bool) get_option( 'seo_agent_ai_autopilot_enabled', false ) ) {
 			return new WP_Error( 'seo_agent_ai_risky_recommendation', __( 'Only safe recommendations can be auto-applied.', 'seo-agent-ai' ) );
 		}
 
@@ -75,32 +76,53 @@ class SEO_Agent_AI_Fix_Executor {
 
 		$this->backup_meta( $post_id );
 
+		$changed = false;
+
 		if ( $new_title !== '' ) {
 			$bounded_title = $this->bounded_value( $new_title, 60 );
 			$prev_title    = $this->bridge->get_meta_title( $post_id );
 
-			$this->bridge->set_meta_title( $post_id, $bounded_title );
-
-			$this->activity_log->log(
-				$post_id, $type, 'meta_title',
-				$prev_title, $bounded_title,
-				$reason, $signal_data,
-				$confidence, $triggered_by
-			);
+			if ( $bounded_title !== $prev_title ) {
+				$this->bridge->set_meta_title( $post_id, $bounded_title );
+				$this->activity_log->log(
+					$post_id,
+					$type,
+					'meta_title',
+					$prev_title,
+					$bounded_title,
+					$reason,
+					$signal_data,
+					$confidence,
+					$triggered_by
+				);
+				$changed = true;
+			}
 		}
 
 		if ( $new_description !== '' ) {
 			$bounded_desc = $this->bounded_value( $new_description, 155 );
 			$prev_desc    = $this->bridge->get_meta_description( $post_id );
 
-			$this->bridge->set_meta_description( $post_id, $bounded_desc );
+			if ( $bounded_desc !== $prev_desc ) {
+				$this->bridge->set_meta_description( $post_id, $bounded_desc );
+				$this->activity_log->log(
+					$post_id,
+					$type,
+					'meta_description',
+					$prev_desc,
+					$bounded_desc,
+					$reason,
+					$signal_data,
+					$confidence,
+					$triggered_by
+				);
+				$changed = true;
+			}
+		}
 
-			$this->activity_log->log(
-				$post_id, $type, 'meta_description',
-				$prev_desc, $bounded_desc,
-				$reason, $signal_data,
-				$confidence, $triggered_by
-			);
+		// Nothing actually changed — bail without updating the timestamp.
+		if ( ! $changed && ! isset( $proposed['focus_keyword'] ) ) {
+			return new WP_Error( 'seo_agent_ai_no_change', __( 'Proposed values are identical to current values — no change applied.', 'seo-agent-ai' ) );
 		}
 
 		if ( isset( $proposed['focus_keyword'] ) && $proposed['focus_keyword'] !== '' ) {
@@ -190,9 +212,9 @@ class SEO_Agent_AI_Fix_Executor {
 			$history = array();
 		}
 
-		$snap        = array( 'captured_at' => current_time( 'mysql' ) );
-		$title_keys  = $this->bridge->get_all_backup_keys( 'title' );
-		$desc_keys   = $this->bridge->get_all_backup_keys( 'description' );
+		$snap       = array( 'captured_at' => current_time( 'mysql' ) );
+		$title_keys = $this->bridge->get_all_backup_keys( 'title' );
+		$desc_keys  = $this->bridge->get_all_backup_keys( 'description' );
 
 		foreach ( array_merge( $title_keys, $desc_keys ) as $key ) {
 			$snap[ $key ] = (string) get_post_meta( $post_id, $key, true );

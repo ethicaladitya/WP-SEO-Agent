@@ -51,8 +51,38 @@ class SEO_Agent_AI_Decision_Engine {
 		$proposed   = $recommendation['proposed'] ?? array();
 		$reason     = (string) ( $recommendation['reason'] ?? '' );
 
-		$tier         = $this->classify( $confidence, $risk, $autopilot_threshold );
-		$decision_id  = 0;
+		$tier        = $this->classify( $confidence, $risk, $autopilot_threshold );
+		$decision_id = 0;
+
+		// Skip recording if the proposed value is identical to what's already stored.
+		if ( isset( $proposed['meta_title'] ) ) {
+			$stored_title = (string) get_post_meta( $post_id, '_seo_agent_ai_meta_title', true );
+			if ( $stored_title === '' ) {
+				$p            = get_post( $post_id );
+				$stored_title = $p instanceof WP_Post ? $p->post_title : '';
+			}
+			if ( trim( (string) $proposed['meta_title'] ) === trim( $stored_title ) ) {
+				return array(
+					'tier'        => 'discarded',
+					'decision_id' => 0,
+					'confidence'  => $confidence,
+					'risk_level'  => $risk,
+					'type'        => $type,
+				);
+			}
+		}
+		if ( isset( $proposed['meta_description'] ) && ! isset( $proposed['meta_title'] ) ) {
+			$stored_desc = (string) get_post_meta( $post_id, '_seo_agent_ai_meta_description', true );
+			if ( trim( (string) $proposed['meta_description'] ) === trim( $stored_desc ) ) {
+				return array(
+					'tier'        => 'discarded',
+					'decision_id' => 0,
+					'confidence'  => $confidence,
+					'risk_level'  => $risk,
+					'type'        => $type,
+				);
+			}
+		}
 
 		if ( ! $dry_run ) {
 			$decision_id = $this->record( $post_id, $recommendation, $tier );
@@ -164,8 +194,13 @@ class SEO_Agent_AI_Decision_Engine {
 	 * @return string 'auto_apply' | 'pending_approval' | 'discarded'
 	 */
 	public function classify( $confidence, $risk, $autopilot_threshold = 0.70 ) {
-		if ( $confidence >= $autopilot_threshold && $risk === 'safe' ) {
-			return 'auto_apply';
+		if ( $confidence >= $autopilot_threshold ) {
+			// When autopilot is fully enabled, apply everything (agent mode).
+			// When autopilot is off, only auto-apply safe recommendations.
+			$autopilot_on = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
+			if ( $autopilot_on || $risk === 'safe' ) {
+				return 'auto_apply';
+			}
 		}
 
 		if ( $confidence >= self::MEDIUM_CONFIDENCE_THRESHOLD ) {
@@ -207,18 +242,20 @@ class SEO_Agent_AI_Decision_Engine {
 			'discarded'        => SEO_Agent_AI_DB_Manager::STATUS_DISCARDED,
 		);
 
-		$id = SEO_Agent_AI_DB_Manager::insert_decision( array(
-			'post_id'         => $post_id,
-			'decision_type'   => $type,
-			'field'           => $field,
-			'proposed_value'  => $proposed_value,
-			'current_value'   => $current_value,
-			'confidence'      => $confidence,
-			'reasoning'       => $recommendation['reason'] ?? '',
-			'expected_impact' => $recommendation['expected_impact'] ?? $this->infer_impact( $tier, $confidence ),
-			'risk_level'      => $recommendation['risk'] ?? 'safe',
-			'status'          => $status_map[ $tier ] ?? SEO_Agent_AI_DB_Manager::STATUS_PENDING,
-		) );
+		$id = SEO_Agent_AI_DB_Manager::insert_decision(
+			array(
+				'post_id'         => $post_id,
+				'decision_type'   => $type,
+				'field'           => $field,
+				'proposed_value'  => $proposed_value,
+				'current_value'   => $current_value,
+				'confidence'      => $confidence,
+				'reasoning'       => $recommendation['reason'] ?? '',
+				'expected_impact' => $recommendation['expected_impact'] ?? $this->infer_impact( $tier, $confidence ),
+				'risk_level'      => $recommendation['risk'] ?? 'safe',
+				'status'          => $status_map[ $tier ] ?? SEO_Agent_AI_DB_Manager::STATUS_PENDING,
+			)
+		);
 
 		return (int) $id;
 	}
