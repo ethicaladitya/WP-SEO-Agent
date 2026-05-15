@@ -174,7 +174,7 @@ class SEO_Agent_AI_Plugin {
 		// Admin page sub-page instances.
 		$connect_page           = new SEO_Agent_AI_Connect_Page( $this->oauth );
 		$report_page            = new SEO_Agent_AI_Report_Page( $this->activity_log, $this->data_store );
-		$dashboard_page         = new SEO_Agent_AI_Dashboard_Page( $this->decision_engine, $this->report_engine );
+		$dashboard_page         = new SEO_Agent_AI_Dashboard_Page( $this->decision_engine, $this->report_engine, $this->activity_log );
 		$opportunities_page     = new SEO_Agent_AI_Opportunities_Page( $this->decision_engine );
 		$rankings_page          = new SEO_Agent_AI_Rankings_Page();
 		$pending_approvals_page = new SEO_Agent_AI_Pending_Approvals_Page( $this->decision_engine, $this->fix_executor, $this->internal_link_engine );
