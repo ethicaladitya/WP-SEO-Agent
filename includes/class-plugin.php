@@ -159,6 +159,13 @@ class SEO_Agent_AI_Plugin {
 		$this->report_engine        = new SEO_Agent_AI_Report_Engine( $this->logger );
 		$this->queue_manager        = new SEO_Agent_AI_Queue_Manager( $this->logger );
 
+		// Feature modules.
+		$this->image_seo        = new SEO_Agent_AI_Image_SEO( $this->gemini, $this->openai, $this->logger );
+		$this->social_meta      = new SEO_Agent_AI_Social_Meta();
+		$this->meta_box         = new SEO_Agent_AI_Meta_Box();
+		$this->taxonomy_seo     = new SEO_Agent_AI_Taxonomy_SEO();
+		$this->redirect_manager = new SEO_Agent_AI_Redirect_Manager();
+
 		// Admin page sub-page instances.
 		$connect_page           = new SEO_Agent_AI_Connect_Page( $this->oauth );
 		$report_page            = new SEO_Agent_AI_Report_Page( $this->activity_log, $this->data_store );
@@ -230,13 +237,6 @@ class SEO_Agent_AI_Plugin {
 
 		// Cron hook — orphan detection.
 		add_action( self::CRON_HOOK_ORPHAN, array( $this, 'run_detect_orphans' ) );
-
-		// Feature modules.
-		$this->image_seo        = new SEO_Agent_AI_Image_SEO( $this->gemini, $this->openai, $this->logger );
-		$this->social_meta      = new SEO_Agent_AI_Social_Meta();
-		$this->meta_box         = new SEO_Agent_AI_Meta_Box();
-		$this->taxonomy_seo     = new SEO_Agent_AI_Taxonomy_SEO();
-		$this->redirect_manager = new SEO_Agent_AI_Redirect_Manager();
 
 		$this->image_seo->init_hooks();
 		$this->social_meta->init_hooks();
