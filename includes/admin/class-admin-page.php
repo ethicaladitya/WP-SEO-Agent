@@ -559,7 +559,8 @@ class SEO_Agent_AI_Admin_Page {
 		$client_secret   = (string) get_option( SEO_Agent_AI_Google_OAuth::OPTION_CLIENT_SECRET, '' );
 		$gsc_site_url    = (string) get_option( SEO_Agent_AI_GSC_Client::OPTION_GSC_SITE_URL, home_url( '/' ) );
 		$ga4_property_id = (string) get_option( SEO_Agent_AI_GA4_Client::OPTION_GA4_PROPERTY_ID, '' );
-		$gemini_key      = (string) get_option( SEO_Agent_AI_Gemini_Client::OPTION_API_KEY, '' );
+		$gemini_has_key  = '' !== (string) get_option( SEO_Agent_AI_Gemini_Client::OPTION_API_KEY, '' );
+		$openai_has_key  = '' !== (string) get_option( SEO_Agent_AI_OpenAI_Client::OPTION_API_KEY, '' );
 		$autopilot       = (bool) get_option( 'seo_agent_ai_autopilot_enabled', false );
 		$max_daily       = (int) get_option( 'seo_agent_ai_autopilot_max_daily', 5 );
 		$min_confidence  = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
@@ -728,8 +729,11 @@ class SEO_Agent_AI_Admin_Page {
 						<tr>
 							<th scope="row"><label for="gemini_api_key"><?php esc_html_e( 'Gemini API Key', 'seo-agent-ai' ); ?></label></th>
 							<td>
-								<input type="password" id="gemini_api_key" name="gemini_api_key" value="<?php echo esc_attr( $gemini_key ); ?>" class="regular-text" autocomplete="off" />
-								<p class="description"><?php esc_html_e( 'Stored encrypted at rest (AES-256-CBC) in WordPress options. Leave blank to keep the existing key — the field is intentionally empty even when a key is saved. Define SEO_AGENT_AI_GEMINI_API_KEY in wp-config.php to override the saved value.', 'seo-agent-ai' ); ?></p>
+								<input type="password" id="gemini_api_key" name="gemini_api_key" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $gemini_has_key ? esc_attr__( 'Key saved — enter a new one to replace it', 'seo-agent-ai' ) : esc_attr__( 'Enter Gemini API key', 'seo-agent-ai' ); ?>" />
+								<?php if ( $gemini_has_key ) : ?>
+								<span style="display:inline-block;margin-left:8px;color:#2d6a27;font-weight:600;"><?php esc_html_e( 'Key saved', 'seo-agent-ai' ); ?></span>
+								<?php endif; ?>
+								<p class="description"><?php esc_html_e( 'Stored encrypted (AES-256-CBC). Leave blank to keep the existing key. Enter a new key to replace it.', 'seo-agent-ai' ); ?></p>
 							</td>
 						</tr>
 					</table>
@@ -769,8 +773,11 @@ class SEO_Agent_AI_Admin_Page {
 						<tr>
 							<th scope="row"><label for="openai_api_key"><?php esc_html_e( 'API Key', 'seo-agent-ai' ); ?></label></th>
 							<td>
-								<input type="password" id="openai_api_key" name="openai_api_key" value="" class="regular-text" autocomplete="off" placeholder="<?php esc_attr_e( 'Leave blank to keep existing key', 'seo-agent-ai' ); ?>" />
-								<p class="description"><?php esc_html_e( 'Stored encrypted. Leave blank to keep the saved value. Define SEO_AGENT_AI_OPENAI_API_KEY in wp-config.php to override.', 'seo-agent-ai' ); ?></p>
+								<input type="password" id="openai_api_key" name="openai_api_key" value="" class="regular-text" autocomplete="new-password" placeholder="<?php echo $openai_has_key ? esc_attr__( 'Key saved — enter a new one to replace it', 'seo-agent-ai' ) : esc_attr__( 'Enter API key', 'seo-agent-ai' ); ?>" />
+								<?php if ( $openai_has_key ) : ?>
+								<span style="display:inline-block;margin-left:8px;color:#2d6a27;font-weight:600;"><?php esc_html_e( 'Key saved', 'seo-agent-ai' ); ?></span>
+								<?php endif; ?>
+								<p class="description"><?php esc_html_e( 'Stored encrypted. Leave blank to keep the existing key. Enter a new key to replace it.', 'seo-agent-ai' ); ?></p>
 							</td>
 						</tr>
 						<tr>

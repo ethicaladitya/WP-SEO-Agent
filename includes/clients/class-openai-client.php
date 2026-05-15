@@ -6,13 +6,15 @@
  * provider can be swapped in the recommendation engine transparently.
  *
  * Supports any endpoint that speaks the OpenAI chat-completions API format:
- *   - Standard OpenAI:         https://api.openai.com/v1  (default)
- *   - Azure legacy (per-deploy): https://{resource}.openai.azure.com/openai/deployments/{deploy}
- *   - Azure OpenAI-compat (/v1): https://{resource}.openai.azure.com/openai/v1
- *   - Local / custom:           any OpenAI-compatible base URL
+ *   - Standard OpenAI:            https://api.openai.com/v1  (default)
+ *   - Azure legacy (per-deploy):  https://{resource}.openai.azure.com/openai/deployments/{deploy}
+ *   - Azure OpenAI-compat (/v1):  https://{resource}.openai.azure.com/openai/v1
+ *   - Azure AI Foundry:           https://{resource}.services.ai.azure.com/api/projects/{proj}/inference
+ *   - Local / custom:             any OpenAI-compatible base URL
  *
  * Azure legacy endpoints: use `api-key` header + append ?api-version=2024-02-01.
  * Azure /openai/v1 endpoints: use `Authorization: Bearer` (OpenAI-compatible) — no api-version.
+ * Azure AI Foundry endpoints: use `api-key` header + append ?api-version=2025-01-01.
  * Detection is automatic; the admin UI presents a neutral "Base URL" field.
  *
  * @package SEO_Agent_AI
@@ -47,7 +49,7 @@ class SEO_Agent_AI_OpenAI_Client {
 	/** @var string */
 	private $model;
 	/**
-	 * True for any *.openai.azure.com URL.
+	 * True for any *.openai.azure.com URL (legacy Azure OpenAI).
 	 * @var bool
 	 */
 	private $is_azure;
@@ -59,15 +61,23 @@ class SEO_Agent_AI_OpenAI_Client {
 	 */
 	private $is_azure_v1;
 
+	/**
+	 * True for Azure AI Foundry endpoints (*.services.ai.azure.com).
+	 * Uses api-key header and api-version=2025-01-01.
+	 * @var bool
+	 */
+	private $is_azure_foundry;
+
 	public function __construct() {
 		// Do NOT resolve the API key here — Crypto::decrypt() calls wp_salt()
 		// which is not available during early plugin load (the plugin calls
 		// SEO_Agent_AI_Plugin::instance() at global scope). Key is resolved
 		// lazily on the first API call via get_api_key().
-		$this->base_url    = rtrim( $this->resolve_base_url(), '/' );
-		$this->model       = $this->resolve_model();
-		$this->is_azure    = ( strpos( $this->base_url, '.openai.azure.com' ) !== false );
-		$this->is_azure_v1 = $this->is_azure && (
+		$this->base_url         = rtrim( $this->resolve_base_url(), '/' );
+		$this->model            = $this->resolve_model();
+		$this->is_azure         = ( strpos( $this->base_url, '.openai.azure.com' ) !== false );
+		$this->is_azure_foundry = ( strpos( $this->base_url, '.services.ai.azure.com' ) !== false );
+		$this->is_azure_v1      = $this->is_azure && (
 			str_ends_with( $this->base_url, '/openai/v1' ) ||
 			strpos( $this->base_url, '/openai/v1/' ) !== false
 		);
@@ -293,11 +303,15 @@ class SEO_Agent_AI_OpenAI_Client {
 	/**
 	 * Build the completions endpoint URL.
 	 *
+	 * - Azure AI Foundry  → {base_url}/chat/completions?api-version=2025-01-01
 	 * - Azure /openai/v1  → {base_url}/chat/completions  (no api-version)
 	 * - Azure legacy      → {base_url}/chat/completions?api-version=2024-02-01
 	 * - Standard/custom   → {base_url}/chat/completions
 	 */
 	private function build_endpoint() {
+		if ( $this->is_azure_foundry ) {
+			return $this->base_url . '/chat/completions?api-version=2025-01-01';
+		}
 		if ( $this->is_azure && ! $this->is_azure_v1 ) {
 			// Legacy deployment-specific Azure format requires api-version.
 			return $this->base_url . '/chat/completions?api-version=2024-02-01';
@@ -310,6 +324,7 @@ class SEO_Agent_AI_OpenAI_Client {
 	 * Build request headers.
 	 *
 	 * - Azure legacy (/openai/deployments/…) → api-key header
+	 * - Azure AI Foundry (services.ai.azure.com) → api-key header
 	 * - Everything else (standard OpenAI, Azure /openai/v1) → Authorization: Bearer
 	 */
 	private function build_headers() {
@@ -317,8 +332,8 @@ class SEO_Agent_AI_OpenAI_Client {
 			'Content-Type' => 'application/json',
 		);
 
-		if ( $this->is_azure && ! $this->is_azure_v1 ) {
-			// Legacy Azure deployment endpoint uses the api-key header.
+		if ( $this->is_azure_foundry || ( $this->is_azure && ! $this->is_azure_v1 ) ) {
+			// Azure Foundry and legacy Azure deployment both use the api-key header.
 			$headers['api-key'] = $this->get_api_key();
 		} else {
 			// Standard OpenAI + Azure /openai/v1 both use Bearer auth.
