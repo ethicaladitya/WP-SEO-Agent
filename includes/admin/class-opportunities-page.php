@@ -46,14 +46,29 @@ class SEO_Agent_AI_Opportunities_Page {
 
 		?>
 		<div class="wrap seo-agent-ai-opportunities">
-			<h1><?php esc_html_e( 'SEO Opportunities', 'seo-agent-ai' ); ?></h1>
+
+			<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+				<h1 style="margin:0"><?php esc_html_e( 'SEO Opportunities', 'seo-agent-ai' ); ?></h1>
+				<div>
+					<button id="seo-agent-scan-btn" class="button button-primary" style="display:inline-flex;align-items:center;gap:6px">
+						<span class="dashicons dashicons-search" style="font-size:16px;width:16px;height:16px;margin-top:1px"></span>
+						<span id="seo-agent-scan-label"><?php esc_html_e( 'Scan for Opportunities', 'seo-agent-ai' ); ?></span>
+					</button>
+					<div id="seo-agent-scan-wrap" style="display:none;margin-top:10px;min-width:280px">
+						<div style="background:#e5e5e5;border-radius:3px;height:6px;overflow:hidden;margin-bottom:6px">
+							<div id="seo-agent-scan-bar" style="height:100%;width:0%;background:#2271b1;transition:width .3s ease"></div>
+						</div>
+						<p id="seo-agent-scan-status" style="margin:0;font-size:12px;color:#555"></p>
+					</div>
+				</div>
+			</div>
 
 			<?php if ( ! empty( $_GET['updated'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification ?>
 			<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Changes applied successfully.', 'seo-agent-ai' ); ?></p></div>
-		<?php endif; ?>
+			<?php endif; ?>
 
-		<?php if ( $autopilot ) : ?>
-			<div class="notice notice-info inline" style="margin:12px 0;padding:10px 14px;display:flex;align-items:center;gap:16px;">
+			<?php if ( $autopilot ) : ?>
+			<div class="notice notice-info inline" style="margin:0 0 12px;padding:10px 14px;display:flex;align-items:center;gap:16px;">
 				<span>&#9889; <strong><?php esc_html_e( 'Autopilot is ON', 'seo-agent-ai' ); ?></strong> — <?php esc_html_e( 'Safe opportunities can be applied directly from this page.', 'seo-agent-ai' ); ?></span>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:0;">
 					<?php wp_nonce_field( 'seo_agent_ai_bulk_apply_safe', '_wpnonce' ); ?>
@@ -65,7 +80,7 @@ class SEO_Agent_AI_Opportunities_Page {
 				</form>
 			</div>
 			<?php else : ?>
-			<p class="description">
+			<p class="description" style="margin-bottom:12px">
 				<?php
 				echo esc_html(
 					sprintf(
@@ -81,25 +96,110 @@ class SEO_Agent_AI_Opportunities_Page {
 			<?php $this->render_filters( $filter_type, $filter_risk ); ?>
 
 			<?php if ( empty( $decisions ) ) : ?>
-				<div style="background:#fff;border:1px solid #ddd;border-radius:4px;padding:24px 28px;margin-top:12px">
-					<p style="margin:0 0 12px;font-size:14px">
-						<strong><?php esc_html_e( 'No opportunities yet.', 'seo-agent-ai' ); ?></strong>
-						<?php esc_html_e( 'Run a full scan so the agent can analyze your pages and generate prioritized SEO recommendations.', 'seo-agent-ai' ); ?>
+				<div id="seo-agent-empty-state" style="background:#f6f7f7;border:1px solid #ddd;border-radius:4px;padding:32px 28px;margin-top:12px;text-align:center">
+					<span class="dashicons dashicons-chart-line" style="font-size:40px;width:40px;height:40px;color:#c3c4c7;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto"></span>
+					<p style="margin:0 0 6px;font-size:15px;font-weight:600;color:#1d2327"><?php esc_html_e( 'No opportunities yet', 'seo-agent-ai' ); ?></p>
+					<p style="margin:0 0 20px;color:#646970;max-width:420px;margin-left:auto;margin-right:auto">
+						<?php esc_html_e( 'Scan your site so the agent can analyze every page, score it, and surface prioritized SEO recommendations.', 'seo-agent-ai' ); ?>
 					</p>
-					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
-						<?php wp_nonce_field( 'seo_agent_ai_run_analysis' ); ?>
-						<input type="hidden" name="action" value="seo_agent_ai_run_analysis">
-						<button type="submit" class="button button-primary">
-							<span class="dashicons dashicons-search" style="vertical-align:middle;margin-top:-2px;margin-right:4px"></span>
-							<?php esc_html_e( 'Run Full Scan', 'seo-agent-ai' ); ?>
-						</button>
-					</form>
+					<button id="seo-agent-scan-btn-empty" class="button button-primary button-hero" style="display:inline-flex;align-items:center;gap:8px">
+						<span class="dashicons dashicons-search" style="font-size:18px;width:18px;height:18px;margin-top:2px"></span>
+						<span><?php esc_html_e( 'Scan My Site Now', 'seo-agent-ai' ); ?></span>
+					</button>
 				</div>
 			<?php else : ?>
 				<?php $this->render_table( $decisions, $autopilot ); ?>
 				<?php $this->render_pagination( $total, $per_page, $paged ); ?>
 			<?php endif; ?>
+
 		</div>
+
+		<?php $this->render_scan_js(); ?>
+		<?php
+	}
+
+	private function render_scan_js() {
+		$nonce = wp_create_nonce( 'seo_agent_ai_analyze_batch' );
+		?>
+		<script>
+		(function () {
+			var nonce   = <?php echo wp_json_encode( $nonce ); ?>;
+			var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+
+			var btn      = document.getElementById('seo-agent-scan-btn');
+			var btnEmpty = document.getElementById('seo-agent-scan-btn-empty');
+			var label    = document.getElementById('seo-agent-scan-label');
+			var wrap     = document.getElementById('seo-agent-scan-wrap');
+			var bar      = document.getElementById('seo-agent-scan-bar');
+			var status   = document.getElementById('seo-agent-scan-status');
+
+			function startScan() {
+				setScanning(true);
+				runBatch(0);
+			}
+
+			function setScanning(active) {
+				if (btn) btn.disabled = active;
+				if (btnEmpty) btnEmpty.disabled = active;
+				if (label) label.textContent = active
+					? <?php echo wp_json_encode( __( 'Scanning…', 'seo-agent-ai' ) ); ?>
+					: <?php echo wp_json_encode( __( 'Scan for Opportunities', 'seo-agent-ai' ) ); ?>;
+				if (wrap) wrap.style.display = active ? 'block' : 'none';
+			}
+
+			function updateProgress(pct, text) {
+				if (bar)    bar.style.width  = pct + '%';
+				if (status) status.textContent = text;
+			}
+
+			function runBatch(offset) {
+				var body = new FormData();
+				body.append('action',      'seo_agent_ai_analyze_batch');
+				body.append('_ajax_nonce', nonce);
+				body.append('offset',      offset);
+
+				fetch(ajaxUrl, { method: 'POST', body: body })
+					.then(function (r) { return r.json(); })
+					.then(function (res) {
+						if (!res.success) {
+							showError(res.data || <?php echo wp_json_encode( __( 'Scan failed. Please try again.', 'seo-agent-ai' ) ); ?>);
+							return;
+						}
+
+						var d = res.data;
+						var pct  = d.percent || 0;
+						var text = d.done
+							? <?php echo wp_json_encode( __( 'Scan complete!', 'seo-agent-ai' ) ); ?> + ' ' +
+							  d.with_recs + ' ' + <?php echo wp_json_encode( __( 'new recommendation(s) found. Reloading…', 'seo-agent-ai' ) ); ?>
+							: <?php echo wp_json_encode( __( 'Scanning', 'seo-agent-ai' ) ); ?> + ' ' + pct + '% — ' + (d.current_title || '');
+
+						updateProgress(pct, text);
+
+						if (d.done) {
+							setTimeout(function () { window.location.reload(); }, 1800);
+						} else {
+							runBatch(d.processed);
+						}
+					})
+					.catch(function () {
+						showError(<?php echo wp_json_encode( __( 'Network error. Please try again.', 'seo-agent-ai' ) ); ?>);
+					});
+			}
+
+			function showError(msg) {
+				setScanning(false);
+				updateProgress(0, '');
+				if (status) {
+					status.style.color = '#d63638';
+					status.textContent  = msg;
+					if (wrap) wrap.style.display = 'block';
+				}
+			}
+
+			if (btn)      btn.addEventListener('click',      startScan);
+			if (btnEmpty) btnEmpty.addEventListener('click', startScan);
+		})();
+		</script>
 		<?php
 	}
 
