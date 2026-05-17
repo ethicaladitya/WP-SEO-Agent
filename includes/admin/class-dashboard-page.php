@@ -92,16 +92,21 @@ class SEO_Agent_AI_Dashboard_Page {
 	// -------------------------------------------------------------------
 
 	private function render_scan_button( $extra_class = '' ) {
-		echo '<button id="seo-agent-dash-scan-btn" class="button ' . esc_attr( $extra_class ) . '" style="display:inline-flex;align-items:center;gap:6px">';
+		static $progress_rendered = false;
+		echo '<button class="seo-agent-dash-scan-btn button ' . esc_attr( $extra_class ) . '" style="display:inline-flex;align-items:center;gap:6px">';
 		echo '<span class="dashicons dashicons-search" style="font-size:16px;width:16px;height:16px;margin-top:1px"></span>';
-		echo '<span id="seo-agent-dash-scan-label">' . esc_html__( 'Run Full Scan', 'seo-agent-ai' ) . '</span>';
+		echo '<span class="seo-agent-dash-scan-label">' . esc_html__( 'Run Full Scan', 'seo-agent-ai' ) . '</span>';
 		echo '</button>';
-		echo '<div id="seo-agent-dash-scan-wrap" style="display:none;margin-top:8px;min-width:260px">';
-		echo '<div style="background:#e5e5e5;border-radius:3px;height:5px;overflow:hidden;margin-bottom:5px">';
-		echo '<div id="seo-agent-dash-scan-bar" style="height:100%;width:0%;background:#2271b1;transition:width .3s ease"></div>';
-		echo '</div>';
-		echo '<p id="seo-agent-dash-scan-status" style="margin:0;font-size:12px;color:#555"></p>';
-		echo '</div>';
+		// Render the shared progress bar only once (first button).
+		if ( ! $progress_rendered ) {
+			$progress_rendered = true;
+			echo '<div id="seo-agent-dash-scan-wrap" style="display:none;margin-top:8px;min-width:260px">';
+			echo '<div style="background:#e5e5e5;border-radius:3px;height:5px;overflow:hidden;margin-bottom:5px">';
+			echo '<div id="seo-agent-dash-scan-bar" style="height:100%;width:0%;background:#2271b1;transition:width .3s ease"></div>';
+			echo '</div>';
+			echo '<p id="seo-agent-dash-scan-status" style="margin:0;font-size:12px;color:#555"></p>';
+			echo '</div>';
+		}
 	}
 
 	private function render_onboarding_banner() {
@@ -297,18 +302,23 @@ class SEO_Agent_AI_Dashboard_Page {
 		(function () {
 			var nonce   = <?php echo wp_json_encode( $nonce ); ?>;
 			var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
-			var btn    = document.getElementById('seo-agent-dash-scan-btn');
-			var label  = document.getElementById('seo-agent-dash-scan-label');
+			var btns   = document.querySelectorAll('.seo-agent-dash-scan-btn');
 			var wrap   = document.getElementById('seo-agent-dash-scan-wrap');
 			var bar    = document.getElementById('seo-agent-dash-scan-bar');
 			var status = document.getElementById('seo-agent-dash-scan-status');
-			if (!btn) return;
+			if (!btns.length) return;
+
+			var labelText = {
+				idle:     <?php echo wp_json_encode( __( 'Run Full Scan', 'seo-agent-ai' ) ); ?>,
+				scanning: <?php echo wp_json_encode( __( 'Scanning…', 'seo-agent-ai' ) ); ?>
+			};
 
 			function setScanning(active) {
-				btn.disabled = active;
-				if (label) label.textContent = active
-					? <?php echo wp_json_encode( __( 'Scanning…', 'seo-agent-ai' ) ); ?>
-					: <?php echo wp_json_encode( __( 'Run Full Scan', 'seo-agent-ai' ) ); ?>;
+				btns.forEach(function (b) {
+					b.disabled = active;
+					var lbl = b.querySelector('.seo-agent-dash-scan-label');
+					if (lbl) lbl.textContent = active ? labelText.scanning : labelText.idle;
+				});
 				if (wrap) wrap.style.display = active ? 'block' : 'none';
 			}
 
@@ -356,9 +366,11 @@ class SEO_Agent_AI_Dashboard_Page {
 				}
 			}
 
-			btn.addEventListener('click', function () {
-				setScanning(true);
-				runBatch(0);
+			btns.forEach(function (b) {
+				b.addEventListener('click', function () {
+					setScanning(true);
+					runBatch(0);
+				});
 			});
 		})();
 		</script>

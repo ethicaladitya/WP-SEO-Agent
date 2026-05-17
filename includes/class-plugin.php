@@ -1408,7 +1408,6 @@ class SEO_Agent_AI_Plugin {
 		$openai_key    = isset( $_POST['openai_api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_api_key'] ) ) : '';
 		$openai_url        = isset( $_POST['openai_base_url'] ) ? esc_url_raw( wp_unslash( $_POST['openai_base_url'] ) ) : '';
 		$openai_model      = isset( $_POST['openai_model'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_model'] ) ) : '';
-		$openai_api_ver    = isset( $_POST['openai_api_version'] ) ? sanitize_text_field( wp_unslash( $_POST['openai_api_version'] ) ) : '';
 		$email_reports = ! empty( $_POST['email_reports'] );
 
 		if ( ! in_array( $ai_provider, array( 'gemini', 'openai', 'auto' ), true ) ) {
@@ -1446,9 +1445,6 @@ class SEO_Agent_AI_Plugin {
 		update_option( 'seo_agent_ai_ai_provider', $ai_provider, false );
 		update_option( SEO_Agent_AI_OpenAI_Client::OPTION_BASE_URL, $openai_url, false );
 		update_option( SEO_Agent_AI_OpenAI_Client::OPTION_MODEL, $openai_model, false );
-		if ( $openai_api_ver !== '' ) {
-			update_option( SEO_Agent_AI_OpenAI_Client::OPTION_API_VERSION, $openai_api_ver, false );
-		}
 		update_option( 'seo_agent_ai_email_reports', $email_reports, false );
 
 		wp_safe_redirect( add_query_arg( 'seo_agent_ai_notice', 'settings_saved', admin_url( 'admin.php?page=seo-agent-ai-settings' ) ) );

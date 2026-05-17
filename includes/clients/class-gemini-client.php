@@ -117,7 +117,7 @@ class SEO_Agent_AI_Gemini_Client {
 
 		$result = $this->generate( $prompt );
 
-		if ( $result === null ) {
+		if ( $result === null || is_wp_error( $result ) ) {
 			return null;
 		}
 
@@ -158,7 +158,7 @@ class SEO_Agent_AI_Gemini_Client {
 
 		$result = $this->generate( $prompt );
 
-		if ( $result === null ) {
+		if ( $result === null || is_wp_error( $result ) ) {
 			return null;
 		}
 
@@ -202,7 +202,7 @@ class SEO_Agent_AI_Gemini_Client {
 
 		$result = $this->generate( $prompt );
 
-		if ( $result === null ) {
+		if ( $result === null || is_wp_error( $result ) ) {
 			return null;
 		}
 

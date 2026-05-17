@@ -744,7 +744,6 @@ class SEO_Agent_AI_Admin_Page {
 				$ai_provider      = (string) get_option( 'seo_agent_ai_ai_provider', 'gemini' );
 				$openai_base      = (string) get_option( SEO_Agent_AI_OpenAI_Client::OPTION_BASE_URL, '' );
 				$openai_model     = (string) get_option( SEO_Agent_AI_OpenAI_Client::OPTION_MODEL, '' );
-				$openai_api_ver   = (string) get_option( SEO_Agent_AI_OpenAI_Client::OPTION_API_VERSION, '' );
 				$email_reports    = (bool) get_option( 'seo_agent_ai_email_reports', false );
 				?>
 				<div class="seo-agent-card seo-agent-settings-section">
@@ -794,21 +793,6 @@ class SEO_Agent_AI_Admin_Page {
 							<td>
 								<input type="text" id="openai_model" name="openai_model" value="<?php echo esc_attr( $openai_model ); ?>" class="regular-text" placeholder="gpt-4o-mini" />
 								<p class="description"><?php esc_html_e( 'Leave blank for default (gpt-4o-mini). Change to match the model available at your endpoint.', 'seo-agent-ai' ); ?></p>
-							</td>
-						</tr>
-						<tr id="openai-api-version-row">
-							<th scope="row"><label for="openai_api_version"><?php esc_html_e( 'Azure API Version', 'seo-agent-ai' ); ?></label></th>
-							<td>
-								<input type="text" id="openai_api_version" name="openai_api_version" value="<?php echo esc_attr( $openai_api_ver ); ?>" class="regular-text" placeholder="<?php echo esc_attr( SEO_Agent_AI_OpenAI_Client::AZURE_LEGACY_API_VERSION ); ?>" />
-								<p class="description">
-									<?php
-									printf(
-										/* translators: %s: default Azure api-version string. */
-										esc_html__( 'Azure legacy deployments only. Leave blank to use the default (%s). Update here if Azure retires the current version.', 'seo-agent-ai' ),
-										esc_html( SEO_Agent_AI_OpenAI_Client::AZURE_LEGACY_API_VERSION )
-									);
-									?>
-								</p>
 							</td>
 						</tr>
 					</table>
