@@ -1391,6 +1391,17 @@ class SEO_Agent_AI_Plugin {
 		$max_daily     = isset( $_POST['autopilot_max_daily'] ) ? max( 1, min( 50, absint( $_POST['autopilot_max_daily'] ) ) ) : 5;
 		$min_conf      = isset( $_POST['autopilot_min_confidence'] ) ? round( min( 1.0, max( 0.1, (float) sanitize_text_field( wp_unslash( $_POST['autopilot_min_confidence'] ) ) ) ), 2 ) : 0.7;
 		$log_retention = isset( $_POST['log_retention_days'] ) ? max( 7, min( 730, absint( $_POST['log_retention_days'] ) ) ) : 90;
+		$score_target  = isset( $_POST['score_target'] ) ? max( 1, min( 100, absint( $_POST['score_target'] ) ) ) : 70;
+
+		$post_types_raw = isset( $_POST['post_types'] ) && is_array( $_POST['post_types'] )
+			? array_map( 'sanitize_key', $_POST['post_types'] )
+			: array( 'post' );
+		// Allowlist against actually registered public post types.
+		$valid_types = array_keys( get_post_types( array( 'public' => true ) ) );
+		$post_types  = array_values( array_intersect( $post_types_raw, $valid_types ) );
+		if ( empty( $post_types ) ) {
+			$post_types = array( 'post' );
+		}
 
 		// OpenAI / AI provider settings.
 		$ai_provider   = isset( $_POST['ai_provider'] ) ? sanitize_key( $_POST['ai_provider'] ) : 'gemini';
@@ -1430,6 +1441,8 @@ class SEO_Agent_AI_Plugin {
 		update_option( 'seo_agent_ai_autopilot_max_daily', $max_daily, false );
 		update_option( 'seo_agent_ai_autopilot_min_confidence', $min_conf, false );
 		update_option( 'seo_agent_ai_log_retention_days', $log_retention, false );
+		update_option( 'seo_agent_ai_score_target', $score_target, false );
+		update_option( 'seo_agent_ai_post_types', $post_types, false );
 		update_option( 'seo_agent_ai_ai_provider', $ai_provider, false );
 		update_option( SEO_Agent_AI_OpenAI_Client::OPTION_BASE_URL, $openai_url, false );
 		update_option( SEO_Agent_AI_OpenAI_Client::OPTION_MODEL, $openai_model, false );

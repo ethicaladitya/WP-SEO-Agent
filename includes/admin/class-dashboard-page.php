@@ -45,7 +45,9 @@ class SEO_Agent_AI_Dashboard_Page {
 
 		$recent_changes = $this->activity_log->get_entries( array(), 1, 15 );
 		$total_changes  = $this->activity_log->get_count( array() );
-		$is_first_run   = 0 === $total_changes && empty( $report );
+		$gsc_connected  = '' !== (string) get_option( 'seo_agent_ai_gsc_site', '' );
+		$sitekit_active = class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active();
+		$is_first_run   = 0 === $total_changes && empty( $report ) && ! $gsc_connected && ! $sitekit_active;
 
 		?>
 		<div class="wrap seo-agent-ai-dashboard">
@@ -54,7 +56,6 @@ class SEO_Agent_AI_Dashboard_Page {
 				<?php $this->render_scan_button( 'button-secondary' ); ?>
 			</div>
 
-			<?php $this->render_analysis_notice(); ?>
 			<?php if ( $is_first_run ) : ?>
 				<?php $this->render_onboarding_banner(); ?>
 			<?php endif; ?>
@@ -82,6 +83,8 @@ class SEO_Agent_AI_Dashboard_Page {
 			</div>
 		</div>
 		<?php
+
+		$this->render_scan_js();
 	}
 
 	// -------------------------------------------------------------------
@@ -89,27 +92,16 @@ class SEO_Agent_AI_Dashboard_Page {
 	// -------------------------------------------------------------------
 
 	private function render_scan_button( $extra_class = '' ) {
-		$nonce_field = wp_nonce_field( 'seo_agent_ai_run_analysis', '_wpnonce', true, false );
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline">';
-		echo $nonce_field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		echo '<input type="hidden" name="action" value="seo_agent_ai_run_analysis">';
-		echo '<button type="submit" class="button ' . esc_attr( $extra_class ) . '">';
-		echo '<span class="dashicons dashicons-search" style="vertical-align:middle;margin-top:-2px;margin-right:4px"></span>';
-		echo esc_html__( 'Run Full Scan', 'seo-agent-ai' );
+		echo '<button id="seo-agent-dash-scan-btn" class="button ' . esc_attr( $extra_class ) . '" style="display:inline-flex;align-items:center;gap:6px">';
+		echo '<span class="dashicons dashicons-search" style="font-size:16px;width:16px;height:16px;margin-top:1px"></span>';
+		echo '<span id="seo-agent-dash-scan-label">' . esc_html__( 'Run Full Scan', 'seo-agent-ai' ) . '</span>';
 		echo '</button>';
-		echo '</form>';
-	}
-
-	private function render_analysis_notice() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$notice = sanitize_key( $_GET['seo_agent_ai_notice'] ?? '' );
-		if ( 'analysis_scheduled' !== $notice ) {
-			return;
-		}
-		echo '<div class="notice notice-success is-dismissible" style="margin-left:0">';
-		echo '<p><strong>' . esc_html__( 'Scan scheduled!', 'seo-agent-ai' ) . '</strong> ';
-		echo esc_html__( 'The analysis job will run in the background over the next minute. Refresh this page shortly to see results.', 'seo-agent-ai' );
-		echo '</p></div>';
+		echo '<div id="seo-agent-dash-scan-wrap" style="display:none;margin-top:8px;min-width:260px">';
+		echo '<div style="background:#e5e5e5;border-radius:3px;height:5px;overflow:hidden;margin-bottom:5px">';
+		echo '<div id="seo-agent-dash-scan-bar" style="height:100%;width:0%;background:#2271b1;transition:width .3s ease"></div>';
+		echo '</div>';
+		echo '<p id="seo-agent-dash-scan-status" style="margin:0;font-size:12px;color:#555"></p>';
+		echo '</div>';
 	}
 
 	private function render_onboarding_banner() {
@@ -292,6 +284,85 @@ class SEO_Agent_AI_Dashboard_Page {
 		echo '</div>';
 
 		echo '<p style="margin-top:10px"><a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-activity-log' ) ) . '">' . esc_html__( 'View full activity log →', 'seo-agent-ai' ) . '</a></p>';
+	}
+
+	// -------------------------------------------------------------------
+	// Async scan JS
+	// -------------------------------------------------------------------
+
+	private function render_scan_js() {
+		$nonce = wp_create_nonce( 'seo_agent_ai_analyze_batch' );
+		?>
+		<script>
+		(function () {
+			var nonce   = <?php echo wp_json_encode( $nonce ); ?>;
+			var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
+			var btn    = document.getElementById('seo-agent-dash-scan-btn');
+			var label  = document.getElementById('seo-agent-dash-scan-label');
+			var wrap   = document.getElementById('seo-agent-dash-scan-wrap');
+			var bar    = document.getElementById('seo-agent-dash-scan-bar');
+			var status = document.getElementById('seo-agent-dash-scan-status');
+			if (!btn) return;
+
+			function setScanning(active) {
+				btn.disabled = active;
+				if (label) label.textContent = active
+					? <?php echo wp_json_encode( __( 'Scanning…', 'seo-agent-ai' ) ); ?>
+					: <?php echo wp_json_encode( __( 'Run Full Scan', 'seo-agent-ai' ) ); ?>;
+				if (wrap) wrap.style.display = active ? 'block' : 'none';
+			}
+
+			function updateProgress(pct, text) {
+				if (bar)    bar.style.width    = pct + '%';
+				if (status) status.textContent = text;
+			}
+
+			function runBatch(offset) {
+				var body = new FormData();
+				body.append('action',      'seo_agent_ai_analyze_batch');
+				body.append('_ajax_nonce', nonce);
+				body.append('offset',      offset);
+
+				fetch(ajaxUrl, { method: 'POST', body: body })
+					.then(function (r) { return r.json(); })
+					.then(function (res) {
+						if (!res.success) {
+							showError(res.data || <?php echo wp_json_encode( __( 'Scan failed. Please try again.', 'seo-agent-ai' ) ); ?>);
+							return;
+						}
+						var d    = res.data;
+						var pct  = d.percent || 0;
+						var text = d.done
+							? <?php echo wp_json_encode( __( 'Scan complete!', 'seo-agent-ai' ) ); ?> + ' ' + d.with_recs + ' ' + <?php echo wp_json_encode( __( 'recommendation(s) generated. Reloading…', 'seo-agent-ai' ) ); ?>
+							: <?php echo wp_json_encode( __( 'Scanning', 'seo-agent-ai' ) ); ?> + ' ' + pct + '%' + (d.current_title ? ' — ' + d.current_title : '');
+						updateProgress(pct, text);
+						if (d.done) {
+							setTimeout(function () { window.location.reload(); }, 1800);
+						} else {
+							runBatch(d.processed);
+						}
+					})
+					.catch(function () {
+						showError(<?php echo wp_json_encode( __( 'Network error. Please try again.', 'seo-agent-ai' ) ); ?>);
+					});
+			}
+
+			function showError(msg) {
+				setScanning(false);
+				if (status) {
+					status.style.color = '#d63638';
+					status.textContent  = msg;
+					if (wrap) wrap.style.display = 'block';
+				}
+			}
+
+			btn.addEventListener('click', function () {
+				setScanning(true);
+				runBatch(0);
+			});
+		})();
+		</script>
+		<?php
 	}
 
 	// -------------------------------------------------------------------

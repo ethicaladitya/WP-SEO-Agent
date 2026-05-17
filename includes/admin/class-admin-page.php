@@ -565,6 +565,7 @@ class SEO_Agent_AI_Admin_Page {
 		$max_daily       = (int) get_option( 'seo_agent_ai_autopilot_max_daily', 5 );
 		$min_confidence  = (float) get_option( 'seo_agent_ai_autopilot_min_confidence', 0.7 );
 		$log_retention   = (int) get_option( 'seo_agent_ai_log_retention_days', 90 );
+		$score_target    = (int) get_option( 'seo_agent_ai_score_target', 70 );
 		$conn_result     = get_transient( SEO_Agent_AI_Plugin::CONNECTION_TEST_TRANSIENT );
 		$is_connected    = $this->oauth->is_connected();
 
@@ -808,6 +809,42 @@ class SEO_Agent_AI_Admin_Page {
 									);
 									?>
 								</p>
+							</td>
+						</tr>
+					</table>
+				</div>
+
+				<div class="seo-agent-card seo-agent-settings-section">
+					<h2><?php esc_html_e( 'Content &amp; Analysis', 'seo-agent-ai' ); ?></h2>
+					<p class="description" style="margin-bottom:14px;">
+						<?php esc_html_e( 'Choose which post types the agent scans and the minimum SEO score target for improvement suggestions.', 'seo-agent-ai' ); ?>
+					</p>
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="score_target"><?php esc_html_e( 'Score Target', 'seo-agent-ai' ); ?></label></th>
+							<td>
+								<input type="number" id="score_target" name="score_target" value="<?php echo esc_attr( (string) $score_target ); ?>" min="1" max="100" style="width:80px;" />
+								<p class="description"><?php esc_html_e( 'Posts scoring below this threshold (1–100) are queued for improvement suggestions each week.', 'seo-agent-ai' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Post Types to Scan', 'seo-agent-ai' ); ?></th>
+							<td>
+								<?php
+								$all_post_types   = get_post_types( array( 'public' => true ), 'objects' );
+								$saved_post_types = (array) get_option( 'seo_agent_ai_post_types', array( 'post' ) );
+								foreach ( $all_post_types as $pt ) :
+									if ( 'attachment' === $pt->name ) {
+										continue;
+									}
+									?>
+									<label style="display:block;margin-bottom:6px;">
+										<input type="checkbox" name="post_types[]" value="<?php echo esc_attr( $pt->name ); ?>" <?php checked( in_array( $pt->name, $saved_post_types, true ) ); ?> />
+										<?php echo esc_html( $pt->labels->singular_name ); ?>
+										<code style="font-size:11px;color:#888;margin-left:4px"><?php echo esc_html( $pt->name ); ?></code>
+									</label>
+								<?php endforeach; ?>
+								<p class="description"><?php esc_html_e( 'Only selected post types are included in scans, scoring, and cron analysis passes.', 'seo-agent-ai' ); ?></p>
 							</td>
 						</tr>
 					</table>
