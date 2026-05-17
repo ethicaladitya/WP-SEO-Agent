@@ -44,12 +44,22 @@ class SEO_Agent_AI_Dashboard_Page {
 		$summary       = $report ? ( $report['summary'] ?? array() ) : array();
 
 		$recent_changes = $this->activity_log->get_entries( array(), 1, 15 );
+		$total_changes  = $this->activity_log->get_count( array() );
+		$is_first_run   = 0 === $total_changes && empty( $report );
 
 		?>
 		<div class="wrap seo-agent-ai-dashboard">
-			<h1><?php esc_html_e( 'SEO Agent Dashboard', 'seo-agent-ai' ); ?></h1>
+			<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+				<h1 style="margin:0"><?php esc_html_e( 'SEO Agent Dashboard', 'seo-agent-ai' ); ?></h1>
+				<?php $this->render_scan_button( 'button-secondary' ); ?>
+			</div>
 
-			<?php $this->render_summary_widgets( $summary, $pending_count ); ?>
+			<?php $this->render_analysis_notice(); ?>
+			<?php if ( $is_first_run ) : ?>
+				<?php $this->render_onboarding_banner(); ?>
+			<?php endif; ?>
+
+			<?php $this->render_summary_widgets( $summary, $pending_count, $total_changes ); ?>
 
 			<div class="seo-agent-widget" style="margin-top:20px">
 				<h2><?php esc_html_e( 'Recent Agent Activity', 'seo-agent-ai' ); ?></h2>
@@ -75,11 +85,72 @@ class SEO_Agent_AI_Dashboard_Page {
 	}
 
 	// -------------------------------------------------------------------
+	// Scan button, notice, and onboarding banner
+	// -------------------------------------------------------------------
+
+	private function render_scan_button( $extra_class = '' ) {
+		$nonce_field = wp_nonce_field( 'seo_agent_ai_run_analysis', '_wpnonce', true, false );
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline">';
+		echo $nonce_field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo '<input type="hidden" name="action" value="seo_agent_ai_run_analysis">';
+		echo '<button type="submit" class="button ' . esc_attr( $extra_class ) . '">';
+		echo '<span class="dashicons dashicons-search" style="vertical-align:middle;margin-top:-2px;margin-right:4px"></span>';
+		echo esc_html__( 'Run Full Scan', 'seo-agent-ai' );
+		echo '</button>';
+		echo '</form>';
+	}
+
+	private function render_analysis_notice() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$notice = sanitize_key( $_GET['seo_agent_ai_notice'] ?? '' );
+		if ( 'analysis_scheduled' !== $notice ) {
+			return;
+		}
+		echo '<div class="notice notice-success is-dismissible" style="margin-left:0">';
+		echo '<p><strong>' . esc_html__( 'Scan scheduled!', 'seo-agent-ai' ) . '</strong> ';
+		echo esc_html__( 'The analysis job will run in the background over the next minute. Refresh this page shortly to see results.', 'seo-agent-ai' );
+		echo '</p></div>';
+	}
+
+	private function render_onboarding_banner() {
+		$google_connected = (bool) get_option( 'seo_agent_ai_gsc_site', '' );
+		?>
+		<div style="background:#fff;border:2px solid #2271b1;border-radius:6px;padding:28px 32px;margin-bottom:24px;display:flex;gap:28px;align-items:flex-start">
+			<div style="flex-shrink:0;width:48px;height:48px;background:#2271b1;border-radius:50%;display:flex;align-items:center;justify-content:center">
+				<span class="dashicons dashicons-chart-line" style="color:#fff;font-size:24px;width:24px;height:24px;line-height:1"></span>
+			</div>
+			<div style="flex:1">
+				<h2 style="margin:0 0 8px"><?php esc_html_e( "Welcome — let's scan your site", 'seo-agent-ai' ); ?></h2>
+				<p style="margin:0 0 16px;color:#555;max-width:620px">
+					<?php esc_html_e( "SEO Agent hasn't analyzed your site yet. Run a scan to score every page, detect SEO problems, surface keyword opportunities, and generate AI-powered recommendations. Once done, you can review suggestions manually or switch on Autopilot.", 'seo-agent-ai' ); ?>
+				</p>
+
+				<ol style="margin:0 0 20px;padding-left:18px;color:#333;line-height:1.9">
+					<li>
+						<?php if ( $google_connected ) : ?>
+							<span style="color:#27ae60;font-weight:600">&#10003; <?php esc_html_e( 'Google Search Console connected', 'seo-agent-ai' ); ?></span>
+						<?php else : ?>
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=seo-agent-ai-connect' ) ); ?>">
+								<?php esc_html_e( 'Connect Google Search Console', 'seo-agent-ai' ); ?>
+							</a>
+							<span style="color:#888;font-size:12px"> — <?php esc_html_e( 'optional, unlocks keyword & traffic data', 'seo-agent-ai' ); ?></span>
+						<?php endif; ?>
+					</li>
+					<li style="font-weight:600"><?php esc_html_e( 'Run your first site scan (below)', 'seo-agent-ai' ); ?></li>
+					<li style="color:#888"><?php esc_html_e( 'Review recommendations or enable Autopilot in Settings', 'seo-agent-ai' ); ?></li>
+				</ol>
+
+				<?php $this->render_scan_button( 'button-primary button-hero' ); ?>
+			</div>
+		</div>
+		<?php
+	}
+
+	// -------------------------------------------------------------------
 	// Summary widgets
 	// -------------------------------------------------------------------
 
-	private function render_summary_widgets( $summary, $pending_count ) {
-		$total_changes  = $this->activity_log->get_count( array() );
+	private function render_summary_widgets( $summary, $pending_count, $total_changes = 0 ) {
 		$today_changes  = $this->activity_log->get_count(
 			array( 'date_from' => gmdate( 'Y-m-d' ) . ' 00:00:00' )
 		);
@@ -145,8 +216,8 @@ class SEO_Agent_AI_Dashboard_Page {
 
 	private function render_activity_table( array $entries ) {
 		if ( empty( $entries ) ) {
-			echo '<p>' . esc_html__( 'No changes recorded yet. Run an analysis or enable autopilot.', 'seo-agent-ai' ) . '</p>';
-			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-report' ) ) . '" class="button button-primary">' . esc_html__( 'Run Analysis', 'seo-agent-ai' ) . '</a></p>';
+			echo '<p>' . esc_html__( 'No changes recorded yet. Run a scan to let the agent analyze your site and generate recommendations.', 'seo-agent-ai' ) . '</p>';
+			$this->render_scan_button( 'button-primary' );
 			return;
 		}
 
