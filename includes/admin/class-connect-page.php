@@ -40,122 +40,153 @@ class SEO_Agent_AI_Connect_Page {
 		$email         = $this->oauth->get_connected_email();
 		$redirect_uri  = $this->oauth->get_redirect_uri();
 
-		// Always-visible auth health probe. Cached for 60s in a transient so
-		// repeated page loads don't hit Google's token endpoint each time.
-		$health = $this->probe_auth_health();
+		$sitekit_active    = class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active();
+		$sitekit_installed = defined( 'GOOGLESITEKIT_VERSION' );
 
-		// Notice from a previous action (e.g. disconnect, connect).
+		// Only probe OAuth health when Site Kit is not handling auth.
+		$health = ! $sitekit_active ? $this->probe_auth_health() : array( 'ok' => true, 'message' => '' );
+
 		$notice = filter_input( INPUT_GET, 'seo_agent_ai_notice', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$notice = is_string( $notice ) ? sanitize_key( wp_unslash( $notice ) ) : '';
 
-		// OAuth error passed back via admin_init redirect.
 		$oauth_error = filter_input( INPUT_GET, 'seo_agent_ai_oauth_error', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
 		$oauth_error = is_string( $oauth_error ) ? rawurldecode( sanitize_text_field( wp_unslash( $oauth_error ) ) ) : '';
 		?>
 		<div class="wrap seo-agent-wrap">
 			<h1><?php esc_html_e( 'Connect Google Account', 'seo-agent-ai' ); ?></h1>
 			<p class="description">
-				<?php esc_html_e( 'SEO Agent AI needs access to Google Search Console and Google Analytics to analyze your content performance.', 'seo-agent-ai' ); ?>
+				<?php esc_html_e( 'SEO Agent AI needs access to Google Search Console and Google Analytics to analyze your content performance. Choose one of the two methods below.', 'seo-agent-ai' ); ?>
 			</p>
-
-			<?php if ( class_exists( 'SEO_Agent_AI_SiteKit_Bridge' ) && SEO_Agent_AI_SiteKit_Bridge::is_active() ) : ?>
-				<div class="notice notice-success" style="margin-top:12px;">
-					<p>
-						<strong>&#10003; <?php esc_html_e( 'Connected via Google Site Kit', 'seo-agent-ai' ); ?></strong>
-						&mdash;
-						<?php
-						printf(
-							/* translators: %s: Site Kit settings URL */
-							esc_html__( 'SEO Agent AI is already using your Site Kit connection for Search Console (%1$s) and Analytics (property %2$s). No manual setup needed.', 'seo-agent-ai' ),
-							'<code>' . esc_html( SEO_Agent_AI_SiteKit_Bridge::get_gsc_site_url() ) . '</code>',
-							'<code>' . esc_html( SEO_Agent_AI_SiteKit_Bridge::get_ga4_property_id() ) . '</code>'
-						);
-						?>
-					</p>
-				</div>
-			<?php elseif ( ! defined( 'GOOGLESITEKIT_VERSION' ) ) : ?>
-				<div class="notice notice-info" style="margin-top:12px;">
-					<p>
-						<strong><?php esc_html_e( 'Easier option:', 'seo-agent-ai' ); ?></strong>
-						<?php esc_html_e( 'Install Google Site Kit and SEO Agent AI will connect automatically — no OAuth setup required.', 'seo-agent-ai' ); ?>
-						<a href="<?php echo esc_url( admin_url( 'plugin-install.php?s=google+site+kit&tab=search&type=term' ) ); ?>" style="margin-left:4px;">
-							<?php esc_html_e( 'Install Site Kit', 'seo-agent-ai' ); ?> &rarr;
-						</a>
-					</p>
-				</div>
-			<?php endif; ?>
-
-			<?php if ( $oauth_error ) : ?>
-				<div class="notice notice-error"><p><?php echo esc_html( $oauth_error ); ?></p></div>
-			<?php endif; ?>
 
 			<?php if ( 'google_disconnected' === $notice ) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Google account disconnected.', 'seo-agent-ai' ); ?></p></div>
 			<?php endif; ?>
-
 			<?php if ( 'google_connected' === $notice ) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Google account connected successfully!', 'seo-agent-ai' ); ?></p></div>
 			<?php endif; ?>
-
-			<?php if ( $is_connected && ! $health['ok'] ) : ?>
-				<div class="notice notice-error">
-					<p>
-						<strong><?php esc_html_e( 'Authentication is failing:', 'seo-agent-ai' ); ?></strong>
-						<?php echo esc_html( $health['message'] ); ?>
-					</p>
-					<?php if ( false !== strpos( strtolower( $health['message'] ), 'client secret' ) ) : ?>
-						<p>
-							<strong><?php esc_html_e( 'Most likely cause:', 'seo-agent-ai' ); ?></strong>
-							<?php esc_html_e( 'The OAuth client secret stored here does not match what Google has on file. Rotate or regenerate the secret in Google Cloud Console, paste the new value into Settings, then click Disconnect + Sign in with Google again.', 'seo-agent-ai' ); ?>
-						</p>
-					<?php elseif ( false !== strpos( strtolower( $health['message'] ), 'invalid_grant' ) || false !== strpos( strtolower( $health['message'] ), 'refresh' ) ) : ?>
-						<p>
-							<strong><?php esc_html_e( 'Most likely cause:', 'seo-agent-ai' ); ?></strong>
-							<?php esc_html_e( 'The refresh token has been revoked. Click Disconnect + Sign in with Google to re-authorize.', 'seo-agent-ai' ); ?>
-						</p>
-					<?php endif; ?>
-				</div>
-			<?php elseif ( $is_connected && $health['ok'] ) : ?>
-				<div class="notice notice-success">
-					<p><?php esc_html_e( 'Authentication health check passed: access token can be refreshed successfully.', 'seo-agent-ai' ); ?></p>
-				</div>
+			<?php if ( $oauth_error ) : ?>
+				<div class="notice notice-error"><p><?php echo esc_html( $oauth_error ); ?></p></div>
 			<?php endif; ?>
 
-			<!-- Connection status card -->
-			<div class="seo-agent-card">
+			<?php // ---------------------------------------------------------------
+			// OPTION A — Google Site Kit (automatic, zero-config)
+			// --------------------------------------------------------------- ?>
+			<div class="seo-agent-card" style="border-left:4px solid <?php echo $sitekit_active ? '#27ae60' : ( $sitekit_installed ? '#f39c12' : '#0073aa' ); ?>;">
+				<h2 style="margin-top:0">
+					<?php if ( $sitekit_active ) : ?>
+						<span style="color:#27ae60">&#10003;</span>
+					<?php else : ?>
+						<span style="color:#aaa">&#9312;</span>
+					<?php endif; ?>
+					<?php esc_html_e( 'Option A — Google Site Kit (Recommended)', 'seo-agent-ai' ); ?>
+				</h2>
+
+				<?php if ( $sitekit_active ) : ?>
+					<div class="seo-agent-connect-status connected" style="margin-bottom:12px">
+						<span class="dashicons dashicons-yes-alt"></span>
+						<div>
+							<strong><?php esc_html_e( 'Connected via Site Kit — no manual setup needed.', 'seo-agent-ai' ); ?></strong>
+							<p style="margin:4px 0 0;font-size:13px;color:#3c434a">
+								<?php
+								printf(
+									/* translators: 1: GSC property URL  2: GA4 property ID */
+									esc_html__( 'Search Console: %1$s — Analytics property: %2$s', 'seo-agent-ai' ),
+									'<code>' . esc_html( SEO_Agent_AI_SiteKit_Bridge::get_gsc_site_url() ) . '</code>',
+									'<code>' . esc_html( SEO_Agent_AI_SiteKit_Bridge::get_ga4_property_id() ) . '</code>'
+								);
+								?>
+							</p>
+						</div>
+					</div>
+					<p style="font-size:13px;color:#555;margin:0">
+						<?php esc_html_e( 'SEO Agent AI is reading your Search Console and Analytics data directly from Site Kit. All data collection is active.', 'seo-agent-ai' ); ?>
+					</p>
+
+				<?php elseif ( $sitekit_installed ) : ?>
+					<div class="seo-agent-connect-status disconnected" style="margin-bottom:12px">
+						<span class="dashicons dashicons-warning"></span>
+						<div>
+							<strong><?php esc_html_e( 'Site Kit is installed but not fully connected.', 'seo-agent-ai' ); ?></strong>
+							<p style="margin:4px 0 0;font-size:13px;color:#3c434a">
+								<?php esc_html_e( 'Complete the Site Kit setup wizard so SEO Agent AI can read your data automatically.', 'seo-agent-ai' ); ?>
+							</p>
+						</div>
+					</div>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=googlesitekit-splash' ) ); ?>" class="button button-primary">
+						<?php esc_html_e( 'Complete Site Kit Setup →', 'seo-agent-ai' ); ?>
+					</a>
+
+				<?php else : ?>
+					<p style="font-size:13px;color:#555;margin:0 0 12px">
+						<?php esc_html_e( 'Install the free Google Site Kit plugin. Once you connect it, SEO Agent AI automatically reads your Search Console and Analytics data — no API keys or OAuth credentials required.', 'seo-agent-ai' ); ?>
+					</p>
+					<a href="<?php echo esc_url( admin_url( 'plugin-install.php?s=google+site+kit&tab=search&type=term' ) ); ?>" class="button button-primary">
+						<?php esc_html_e( 'Install Google Site Kit →', 'seo-agent-ai' ); ?>
+					</a>
+				<?php endif; ?>
+			</div>
+
+			<?php // ---------------------------------------------------------------
+			// OPTION B — Manual OAuth (own Google Cloud credentials)
+			// Hidden if Site Kit is already active to avoid confusion.
+			// --------------------------------------------------------------- ?>
+			<?php if ( ! $sitekit_active ) : ?>
+			<div class="seo-agent-card" style="border-left:4px solid <?php echo $is_connected ? '#27ae60' : '#ccc'; ?>;">
+				<h2 style="margin-top:0">
+					<span style="color:#aaa">&#9313;</span>
+					<?php esc_html_e( 'Option B — Manual OAuth (own Google Cloud project)', 'seo-agent-ai' ); ?>
+				</h2>
+				<p style="font-size:13px;color:#555;margin:0 0 14px">
+					<?php esc_html_e( 'Use your own Google Cloud OAuth credentials. Useful when you already have a project set up or prefer not to use Site Kit.', 'seo-agent-ai' ); ?>
+				</p>
+
+				<?php if ( $is_connected && ! $health['ok'] ) : ?>
+					<div class="notice notice-error inline" style="margin:0 0 12px">
+						<p>
+							<strong><?php esc_html_e( 'Authentication failing:', 'seo-agent-ai' ); ?></strong>
+							<?php echo esc_html( $health['message'] ); ?>
+						</p>
+						<?php if ( false !== strpos( strtolower( $health['message'] ), 'client secret' ) ) : ?>
+							<p><?php esc_html_e( 'The OAuth secret stored here no longer matches Google. Regenerate it in Google Cloud Console and re-enter it in Settings, then reconnect.', 'seo-agent-ai' ); ?></p>
+						<?php elseif ( false !== strpos( strtolower( $health['message'] ), 'invalid_grant' ) || false !== strpos( strtolower( $health['message'] ), 'refresh' ) ) : ?>
+							<p><?php esc_html_e( 'The refresh token was revoked. Disconnect and sign in again.', 'seo-agent-ai' ); ?></p>
+						<?php endif; ?>
+					</div>
+				<?php elseif ( $is_connected && $health['ok'] ) : ?>
+					<div class="notice notice-success inline" style="margin:0 0 12px">
+						<p><?php esc_html_e( 'Access token refreshes successfully.', 'seo-agent-ai' ); ?></p>
+					</div>
+				<?php endif; ?>
+
 				<?php if ( $is_connected ) : ?>
-					<div class="seo-agent-connect-status connected">
+					<div class="seo-agent-connect-status connected" style="margin-bottom:12px">
 						<span class="dashicons dashicons-yes-alt"></span>
 						<div>
 							<strong><?php esc_html_e( 'Google Account Connected', 'seo-agent-ai' ); ?></strong>
 							<?php if ( $email ) : ?>
-								<p style="margin:2px 0 0;font-size:13px;color:#3c434a;">
-									<?php echo esc_html( $email ); ?>
-								</p>
+								<p style="margin:2px 0 0;font-size:13px;color:#3c434a"><?php echo esc_html( $email ); ?></p>
 							<?php endif; ?>
 						</div>
 					</div>
-
 					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 						<?php wp_nonce_field( 'seo_agent_ai_google_disconnect' ); ?>
 						<input type="hidden" name="action" value="seo_agent_ai_google_disconnect" />
 						<button type="submit" class="button button-secondary"
-							onclick="return confirm('<?php esc_attr_e( 'Disconnect your Google account? The agent will stop collecting data until reconnected.', 'seo-agent-ai' ); ?>')">
+							onclick="return confirm('<?php esc_attr_e( 'Disconnect your Google account?', 'seo-agent-ai' ); ?>')">
 							<?php esc_html_e( 'Disconnect Google Account', 'seo-agent-ai' ); ?>
 						</button>
 					</form>
 
 				<?php elseif ( $is_configured ) : ?>
-					<div class="seo-agent-connect-status disconnected">
+					<div class="seo-agent-connect-status disconnected" style="margin-bottom:12px">
 						<span class="dashicons dashicons-warning"></span>
 						<div>
-							<strong><?php esc_html_e( 'Not Connected', 'seo-agent-ai' ); ?></strong>
-							<p style="margin:2px 0 0;font-size:13px;color:#3c434a;">
-								<?php esc_html_e( 'Click below to authorize SEO Agent AI with your Google account.', 'seo-agent-ai' ); ?>
+							<strong><?php esc_html_e( 'Credentials saved — not yet connected', 'seo-agent-ai' ); ?></strong>
+							<p style="margin:2px 0 0;font-size:13px;color:#3c434a">
+								<?php esc_html_e( 'Click Sign in with Google to complete the OAuth flow.', 'seo-agent-ai' ); ?>
 							</p>
 						</div>
 					</div>
-
 					<?php
 					$auth_url = $this->oauth->get_authorize_url();
 					if ( ! is_wp_error( $auth_url ) ) :
@@ -172,45 +203,69 @@ class SEO_Agent_AI_Connect_Page {
 					<?php endif; ?>
 
 				<?php else : ?>
-					<div class="notice notice-warning inline" style="margin:0 0 16px;">
-						<p>
-							<?php
-							printf(
-								/* translators: %s: settings page link */
-								esc_html__( 'You need to save your OAuth Client ID and Client Secret before connecting. %s', 'seo-agent-ai' ),
-								'<a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-settings' ) ) . '">' . esc_html__( 'Open Settings', 'seo-agent-ai' ) . '</a>'
-							);
-							?>
-						</p>
-					</div>
-				<?php endif; ?>
-			</div>
-
-			<!-- Setup instructions -->
-			<div class="seo-agent-card">
-				<h2><?php esc_html_e( 'Setup Instructions', 'seo-agent-ai' ); ?></h2>
-				<ol style="font-size:13px;line-height:1.8;max-width:700px;">
-					<li><?php esc_html_e( 'Go to Google Cloud Console → Create (or select) a project.', 'seo-agent-ai' ); ?></li>
-					<li><?php esc_html_e( 'Enable the following APIs: Google Search Console API, Google Analytics Data API.', 'seo-agent-ai' ); ?></li>
-					<li><?php esc_html_e( 'Go to APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID.', 'seo-agent-ai' ); ?></li>
-					<li><?php esc_html_e( 'Application type: Web application.', 'seo-agent-ai' ); ?></li>
-					<li>
-						<?php esc_html_e( 'Add this Authorized Redirect URI:', 'seo-agent-ai' ); ?>
-						<br />
-						<code class="seo-agent-redirect-uri"><?php echo esc_html( $redirect_uri ); ?></code>
-					</li>
-					<li>
+					<p style="font-size:13px;color:#555;margin:0 0 8px">
 						<?php
 						printf(
 							/* translators: %s: settings page link */
-							esc_html__( 'Save the Client ID and Client Secret in %s.', 'seo-agent-ai' ),
+							esc_html__( 'Save your OAuth Client ID and Client Secret in %s first, then return here to sign in.', 'seo-agent-ai' ),
 							'<a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-settings' ) ) . '">' . esc_html__( 'Settings', 'seo-agent-ai' ) . '</a>'
 						);
 						?>
-					</li>
-					<li><?php esc_html_e( 'Return here and click "Sign in with Google".', 'seo-agent-ai' ); ?></li>
-				</ol>
+					</p>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=seo-agent-ai-settings' ) ); ?>" class="button">
+						<?php esc_html_e( 'Open Settings', 'seo-agent-ai' ); ?>
+					</a>
+				<?php endif; ?>
+
+				<details style="margin-top:16px">
+					<summary style="cursor:pointer;font-size:13px;color:#0073aa"><?php esc_html_e( 'How to set up a Google Cloud OAuth project', 'seo-agent-ai' ); ?></summary>
+					<ol style="font-size:13px;line-height:1.8;max-width:680px;margin-top:10px">
+						<li><?php esc_html_e( 'Google Cloud Console → create or select a project.', 'seo-agent-ai' ); ?></li>
+						<li><?php esc_html_e( 'Enable: Google Search Console API and Google Analytics Data API.', 'seo-agent-ai' ); ?></li>
+						<li><?php esc_html_e( 'APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID.', 'seo-agent-ai' ); ?></li>
+						<li><?php esc_html_e( 'Application type: Web application.', 'seo-agent-ai' ); ?></li>
+						<li>
+							<?php esc_html_e( 'Add this as an Authorized Redirect URI:', 'seo-agent-ai' ); ?>
+							<br />
+							<code class="seo-agent-redirect-uri"><?php echo esc_html( $redirect_uri ); ?></code>
+						</li>
+						<li>
+							<?php
+							printf(
+								/* translators: %s: settings page link */
+								esc_html__( 'Paste the Client ID and Client Secret into %s.', 'seo-agent-ai' ),
+								'<a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-settings' ) ) . '">' . esc_html__( 'Settings', 'seo-agent-ai' ) . '</a>'
+							);
+							?>
+						</li>
+						<li><?php esc_html_e( 'Return here and click "Sign in with Google".', 'seo-agent-ai' ); ?></li>
+					</ol>
+				</details>
 			</div>
+			<?php endif; ?>
+
+			<?php if ( $sitekit_active ) : ?>
+				<p style="font-size:12px;color:#888;margin-top:4px">
+					<?php esc_html_e( 'Manual OAuth (Option B) is hidden because Site Kit is already handling authentication.', 'seo-agent-ai' ); ?>
+					<a href="<?php echo esc_url( add_query_arg( 'show_oauth', '1' ) ); ?>"><?php esc_html_e( 'Show anyway', 'seo-agent-ai' ); ?></a>
+				</p>
+
+				<?php if ( isset( $_GET['show_oauth'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+				<div class="seo-agent-card" style="border-left:4px solid #ccc;opacity:.85">
+					<h2 style="margin-top:0;color:#888"><?php esc_html_e( 'Option B — Manual OAuth (inactive while Site Kit is connected)', 'seo-agent-ai' ); ?></h2>
+					<?php if ( $is_connected ) : ?>
+						<p style="color:#555;font-size:13px"><?php esc_html_e( 'Manual OAuth credentials are also saved. Site Kit takes priority.', 'seo-agent-ai' ); ?></p>
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+							<?php wp_nonce_field( 'seo_agent_ai_google_disconnect' ); ?>
+							<input type="hidden" name="action" value="seo_agent_ai_google_disconnect" />
+							<button type="submit" class="button button-secondary"><?php esc_html_e( 'Remove manual OAuth tokens', 'seo-agent-ai' ); ?></button>
+						</form>
+					<?php else : ?>
+						<p style="color:#555;font-size:13px"><?php esc_html_e( 'No manual OAuth credentials saved. Not needed while Site Kit is active.', 'seo-agent-ai' ); ?></p>
+					<?php endif; ?>
+				</div>
+				<?php endif; ?>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
