@@ -21,10 +21,18 @@ class SEO_Agent_AI_Rankings_Page {
 		$days         = isset( $_GET['days'] ) ? (int) $_GET['days'] : 30; // phpcs:ignore WordPress.Security.NonceVerification
 		$days         = in_array( $days, array( 7, 14, 30, 60, 90 ), true ) ? $days : 30;
 
+		// phpcs:ignore WordPress.Security.NonceVerification
+		if ( ! empty( $_GET['triggered'] ) && sanitize_key( $_GET['triggered'] ) === 'seo_agent_fetch_gsc_data' ) { // phpcs:ignore WordPress.Security.NonceVerification
+			echo '<div class="notice notice-success is-dismissible"><p>';
+			esc_html_e( 'GSC keyword fetch triggered. Reload in a moment to see results.', 'seo-agent-ai' );
+			echo '</p></div>';
+		}
+
 		?>
 		<div class="wrap seo-agent-ai-rankings">
 			<h1><?php esc_html_e( 'Keyword Rankings', 'seo-agent-ai' ); ?></h1>
 
+			<?php $this->render_gsc_status_bar(); ?>
 			<?php $this->render_filters( $search_query, $post_id, $days ); ?>
 
 			<?php
@@ -38,6 +46,49 @@ class SEO_Agent_AI_Rankings_Page {
 			?>
 		</div>
 		<?php
+	}
+
+	private function render_gsc_status_bar() {
+		$gsc_site    = (string) get_option( 'seo_agent_ai_gsc_site', '' );
+		$last_sync   = (string) get_option( 'seo_agent_ai_last_run_seo_agent_fetch_gsc_data', '' );
+		$gsc_hook    = 'seo_agent_fetch_gsc_data';
+		$nonce_val   = wp_create_nonce( 'seo_agent_ai_trigger_' . $gsc_hook );
+
+		if ( $gsc_site === '' ) {
+			echo '<div class="notice notice-warning inline" style="margin:0 0 16px;padding:12px 16px">';
+			echo '<p style="margin:0">';
+			echo '<strong>' . esc_html__( 'Google Search Console not connected.', 'seo-agent-ai' ) . '</strong> ';
+			esc_html_e( 'Keyword ranking data comes from GSC. Connect it first, then fetch data.', 'seo-agent-ai' );
+			echo ' <a href="' . esc_url( admin_url( 'admin.php?page=seo-agent-ai-connect' ) ) . '" class="button button-small" style="margin-left:8px">';
+			esc_html_e( 'Connect Google', 'seo-agent-ai' );
+			echo '</a>';
+			echo '</p></div>';
+			return;
+		}
+
+		$sync_label = $last_sync !== ''
+			? sprintf(
+				/* translators: %s: human-readable time diff */
+				__( 'Last sync: %s ago', 'seo-agent-ai' ),
+				human_time_diff( strtotime( $last_sync ), current_time( 'timestamp' ) ) // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
+			)
+			: __( 'Never synced', 'seo-agent-ai' );
+
+		echo '<div style="display:flex;align-items:center;gap:16px;background:#f6f7f7;border:1px solid #ddd;border-radius:4px;padding:10px 16px;margin-bottom:16px">';
+		echo '<span style="color:#555;font-size:13px">';
+		echo '<strong>' . esc_html__( 'GSC:', 'seo-agent-ai' ) . '</strong> ' . esc_html( $gsc_site );
+		echo ' &mdash; ' . esc_html( $sync_label );
+		echo '</span>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin:0">';
+		echo '<input type="hidden" name="action" value="seo_agent_ai_trigger_cron">';
+		echo '<input type="hidden" name="hook" value="' . esc_attr( $gsc_hook ) . '">';
+		echo '<input type="hidden" name="redirect_page" value="seo-agent-rankings">';
+		echo '<input type="hidden" name="_wpnonce" value="' . esc_attr( $nonce_val ) . '">';
+		echo '<button type="submit" class="button button-small">';
+		esc_html_e( 'Fetch Keyword Data Now', 'seo-agent-ai' );
+		echo '</button>';
+		echo '</form>';
+		echo '</div>';
 	}
 
 	private function render_filters( $search_query, $post_id, $days ) {
@@ -96,7 +147,8 @@ class SEO_Agent_AI_Rankings_Page {
 		echo '<h2>' . esc_html( sprintf( __( 'Rankings for: %s', 'seo-agent-ai' ), $title ) ) . '</h2>';
 
 		if ( empty( $rows ) ) {
-			echo '<p>' . esc_html__( 'No keyword history for this post. Fetch GSC data to populate.', 'seo-agent-ai' ) . '</p>';
+			echo '<p>' . esc_html__( 'No keyword history for this post yet.', 'seo-agent-ai' ) . ' ';
+			echo esc_html__( 'Use the "Fetch Keyword Data Now" button above to pull data from Google Search Console.', 'seo-agent-ai' ) . '</p>';
 			return;
 		}
 
@@ -219,7 +271,7 @@ class SEO_Agent_AI_Rankings_Page {
 
 	private function render_mover_table( array $rows, $type ) {
 		if ( empty( $rows ) ) {
-			echo '<p>' . esc_html__( 'No data yet. Requires keyword history data.', 'seo-agent-ai' ) . '</p>';
+			echo '<p style="color:#888">' . esc_html__( 'No data yet — keyword history needs at least two GSC syncs to calculate movement.', 'seo-agent-ai' ) . '</p>';
 			return;
 		}
 

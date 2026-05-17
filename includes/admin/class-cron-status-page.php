@@ -73,7 +73,13 @@ class SEO_Agent_AI_Cron_Status_Page {
 		// Fire the event now.
 		do_action( $hook );
 
-		wp_safe_redirect( admin_url( 'admin.php?page=seo-agent-cron&triggered=' . rawurlencode( $hook ) ) );
+		$redirect_page = sanitize_key( $_POST['redirect_page'] ?? 'seo-agent-cron' );
+		$allowed_pages = array( 'seo-agent-cron', 'seo-agent-rankings' );
+		if ( ! in_array( $redirect_page, $allowed_pages, true ) ) {
+			$redirect_page = 'seo-agent-cron';
+		}
+
+		wp_safe_redirect( admin_url( 'admin.php?page=' . $redirect_page . '&triggered=' . rawurlencode( $hook ) ) );
 		exit;
 	}
 

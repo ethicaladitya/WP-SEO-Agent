@@ -81,7 +81,20 @@ class SEO_Agent_AI_Opportunities_Page {
 			<?php $this->render_filters( $filter_type, $filter_risk ); ?>
 
 			<?php if ( empty( $decisions ) ) : ?>
-				<p><?php esc_html_e( 'No opportunities found. Run an analysis to generate recommendations.', 'seo-agent-ai' ); ?></p>
+				<div style="background:#fff;border:1px solid #ddd;border-radius:4px;padding:24px 28px;margin-top:12px">
+					<p style="margin:0 0 12px;font-size:14px">
+						<strong><?php esc_html_e( 'No opportunities yet.', 'seo-agent-ai' ); ?></strong>
+						<?php esc_html_e( 'Run a full scan so the agent can analyze your pages and generate prioritized SEO recommendations.', 'seo-agent-ai' ); ?>
+					</p>
+					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
+						<?php wp_nonce_field( 'seo_agent_ai_run_analysis' ); ?>
+						<input type="hidden" name="action" value="seo_agent_ai_run_analysis">
+						<button type="submit" class="button button-primary">
+							<span class="dashicons dashicons-search" style="vertical-align:middle;margin-top:-2px;margin-right:4px"></span>
+							<?php esc_html_e( 'Run Full Scan', 'seo-agent-ai' ); ?>
+						</button>
+					</form>
+				</div>
 			<?php else : ?>
 				<?php $this->render_table( $decisions, $autopilot ); ?>
 				<?php $this->render_pagination( $total, $per_page, $paged ); ?>
